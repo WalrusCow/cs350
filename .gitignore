@@ -1,2 +1,13 @@
 os161-1.99/kern/compile
 root/kernel-*
+
+*.o
+*.ko
+*.obj
+*.elf
+
+*.a
+*.out
+*.dll
+*.so
+*.so.*
