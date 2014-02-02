@@ -1,5 +1,6 @@
 os161-1.99/kern/compile
-root/kernel-*
+root
+a1-test-scripts
 
 *.o
 *.ko
