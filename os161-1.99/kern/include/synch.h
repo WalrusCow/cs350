@@ -36,6 +36,7 @@
 
 
 #include <spinlock.h>
+#include "opt-A1.h"
 
 /*
  * Dijkstra-style semaphore.
@@ -44,10 +45,10 @@
  * internally.
  */
 struct semaphore {
-        char *sem_name;
+	char *sem_name;
 	struct wchan *sem_wchan;
 	struct spinlock sem_lock;
-        volatile int sem_count;
+	volatile int sem_count;
 };
 
 struct semaphore *sem_create(const char *name, int initial_count);
@@ -73,13 +74,16 @@ void V(struct semaphore *);
  * (should be) made internally.
  */
 struct lock {
-        char *lk_name;
-        // add what you need here
-        // (don't forget to mark things volatile as needed)
+	char *lk_name;
+#if OPT_A1
+	struct spinlock lk_spinlock;
+	struct wchan *lk_wchan;
+	volatile struct thread *owner;
+#endif /* OPT_A1 */
 };
 
 struct lock *lock_create(const char *name);
-void lock_acquire(struct lock *);
+void lock_destroy(struct lock *);
 
 /*
  * Operations:
@@ -87,15 +91,14 @@ void lock_acquire(struct lock *);
  *                   same time.
  *    lock_release - Free the lock. Only the thread holding the lock may do
  *                   this.
- *    lock_do_i_hold - Return true if the current thread holds the lock; 
+ *    lock_do_i_hold - Return true if the current thread holds the lock;
  *                   false otherwise.
  *
  * These operations must be atomic. You get to write them.
  */
+void lock_acquire(struct lock *);
 void lock_release(struct lock *);
 bool lock_do_i_hold(struct lock *);
-void lock_destroy(struct lock *);
-
 
 /*
  * Condition variable.
@@ -112,9 +115,9 @@ void lock_destroy(struct lock *);
  */
 
 struct cv {
-        char *cv_name;
-        // add what you need here
-        // (don't forget to mark things volatile as needed)
+	char *cv_name;
+	// add what you need here
+	// (don't forget to mark things volatile as needed)
 };
 
 struct cv *cv_create(const char *name);
