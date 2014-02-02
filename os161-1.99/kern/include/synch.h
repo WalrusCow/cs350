@@ -116,8 +116,10 @@ bool lock_do_i_hold(struct lock *);
 
 struct cv {
 	char *cv_name;
-	// add what you need here
-	// (don't forget to mark things volatile as needed)
+#if OPT_A1
+	struct spinlock cv_spinlock;
+	struct wchan *cv_wchan;
+#endif /* OPT_A1 */
 };
 
 struct cv *cv_create(const char *name);
@@ -130,7 +132,7 @@ void cv_destroy(struct cv *);
  *    cv_signal    - Wake up one thread that's sleeping on this CV.
  *    cv_broadcast - Wake up all threads sleeping on this CV.
  *
- * For all three operations, the current thread must hold the lock passed 
+ * For all three operations, the current thread must hold the lock passed
  * in. Note that under normal circumstances the same lock should be used
  * on all operations with any particular CV.
  *
