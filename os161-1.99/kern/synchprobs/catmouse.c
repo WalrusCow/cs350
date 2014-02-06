@@ -87,6 +87,9 @@ int MouseSleepTime = 3;  // length of time a mouse spends sleeping
  */
 struct semaphore *CatMouseWait;
 
+// Global lock (binary semaphore, because why not)
+struct semaphore* mutex = NULL;
+
 // Locks for CVs
 struct lock* wait_lk = NULL;
 struct lock* backlog_lk = NULL;
@@ -94,9 +97,7 @@ struct lock* backlog_lk = NULL;
 struct cv* eat_queue = NULL;
 struct cv* backlog_queue = NULL;
 
-// Mutex locks
-//struct lock* mutex = NULL;
-struct semaphore* mutex = NULL;
+// For bowl mutex
 struct lock* bowl_lk = NULL;
 
 // Array of bowls taken
@@ -138,15 +139,22 @@ void freeBowl(int i) {
 
 void backlog_check(char self) {
 	/* Wait in the backlog if necessary */
-	lock_acquire(wait_lk);
+
+	lock_acquire(wait_lk); // Lock for waiting
+	P(mutex); // Global lock too
 	if (numWaiting && (eating == self)) {
+		// Release locks while queued in the backlog
+		V(mutex);
 		lock_release(wait_lk);
 
+		// Queue up in the backlog
 		lock_acquire(backlog_lk);
 		cv_wait(backlog_queue, backlog_lk);
 		lock_release(backlog_lk);
 		return;
 	}
+	// Release locks if we had nothing to do
+	V(mutex);
 	lock_release(wait_lk);
 }
 
@@ -154,11 +162,23 @@ void wait_check(char self) {
 	/* Wait to eat, if necessary. */
 	char other = (self == 'c') ? 'm' : 'c';
 
+	// Acquire global lock
+	P(mutex);
 	if (eating == other) {
 		// If others eating then wait for signal that all are done
+		// Release global lock while waiting for wait lock
+		V(mutex);
+
 		lock_acquire(wait_lk);
+		// Reacquire global lock to write to variables
+		P(mutex);
 		numWaiting += 1;
+		// Release the global lock while in the wait queue
+		V(mutex);
 		cv_wait(eat_queue, wait_lk);
+
+		// Reacquire the global lock to write to variables
+		P(mutex);
 		numWaiting -= 1;
 		// If nobody else is waiting then open the backlog to begin
 		// waiting to eat
@@ -166,37 +186,50 @@ void wait_check(char self) {
 			cv_broadcast(backlog_queue, backlog_lk);
 			eating = self; // our turn to eat
 		}
+		// Release locks
 		lock_release(wait_lk);
+		V(mutex);
+
+	}
+	else {
+		// If the other animal isn't eating then either we are eating
+		// or nothing is eating. In both cases this is safe
+		eating = self;
+		V(mutex);
 	}
 }
 
 void eat_check(char self) {
 	/* Eat. */
+
+	// Choose cat/mouse things to use
 	int eatTime = (self == 'c') ? CatEatTime : MouseEatTime;
 	void(*eat_func)(unsigned int, int) = (self == 'c') ? cat_eat : mouse_eat;
 
-	// Wait for a bowl to be free
-	P(bowl_sem);
-	//lock_acquire(mutex);
+	// Acquire global lock to access volatiles vars
 	P(mutex);
 	numEating += 1;
-	// First one eating
 	if (numEating == 1) {
+		// First one eating
 		eating = self;
 	}
+	// Release global lock while waiting for a free bowl
+	V(mutex);
+
+	// Wait for a bowl to be free
+	P(bowl_sem);
 
 	// Determine which bowl to eat from
 	int bowl = getBowl();
-	//lock_release(mutex);
-	V(mutex);
+
 	// Actually eat
 	(*eat_func)(bowl, eatTime);
 
-	//lock_acquire(mutex);
-	P(mutex);
 	freeBowl(bowl); // Someone else can use bowl
-
 	V(bowl_sem); // Free up a bowl
+
+	// Acquire global lock to play with volatile variables
+	P(mutex);
 	numEating -= 1;
 	// Last has finished eating
 	if (numEating == 0) {
@@ -204,7 +237,7 @@ void eat_check(char self) {
 		// Broadcast that we have finished eating
 		cv_broadcast(eat_queue, wait_lk);
 	}
-	//lock_release(mutex);
+	// Release global lock
 	V(mutex);
 }
 
@@ -220,8 +253,12 @@ cat_simulation(void * unusedpointer, unsigned long catnumber)
 	(void) catnumber;
 
 	for(int i = 0; i < NumLoops; ++i) {
+		// No restrictions on sleep (wish I could say the same)
 		cat_sleep(CatSleepTime);
 
+		/* Go through the steps in order. This is because the progression
+		 * of states is Backlog -> Waiting -> Eating, so we must check in
+		 * that order to see how far through we fall before stopping. */
 		backlog_check('c');
 		wait_check('c');
 		eat_check('c');
@@ -243,8 +280,12 @@ mouse_simulation(void * unusedpointer, unsigned long mousenumber)
 	(void) mousenumber;
 
 	for(int i = 0; i < NumLoops; ++i) {
+		// No restrictions on sleep (wish I could say the same)
 		mouse_sleep(MouseSleepTime);
 
+		/* Go through the steps in order. This is because the progression
+		 * of states is Backlog -> Waiting -> Eating, so we must check in
+		 * that order to see how far through we fall before stopping. */
 		backlog_check('m');
 		wait_check('m');
 		eat_check('m');
@@ -377,7 +418,6 @@ catmouse(int nargs, char ** args)
   bowl_sem = sem_create("Bowls", NumBowls);
 
   // Two locks as mutexes
-  //mutex = lock_create("mutex");
   mutex = sem_create("mutex", 1);
   bowl_lk = lock_create("bowl_lk");
   // Two locks for condition variables
@@ -420,7 +460,6 @@ catmouse(int nargs, char ** args)
   sem_destroy(bowl_sem);
 
   // Clean up locks
-  //lock_destroy(mutex);
   sem_destroy(mutex);
   lock_destroy(bowl_lk);
   lock_destroy(wait_lk);
