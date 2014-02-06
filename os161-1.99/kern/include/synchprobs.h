@@ -11,3 +11,8 @@ void mouse_eat(unsigned int bowlnumber, int eat_time);
 void cat_sleep(int sleep_time);
 void mouse_sleep(int sleep_time);
 
+int getBowl(void);
+void freeBowl(int);
+void backlog_check(char);
+void wait_check(char);
+void eat_check(char);
