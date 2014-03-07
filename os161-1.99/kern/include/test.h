@@ -27,6 +27,8 @@
  * SUCH DAMAGE.
  */
 
+#include "opt-A2.h"
+
 #ifndef _TEST_H_
 #define _TEST_H_
 
@@ -80,8 +82,12 @@ int malloctest(int, char **);
 int mallocstress(int, char **);
 int nettest(int, char **);
 
+#if OPT_A2
 /* Routine for running a user-level program. */
+int runprogram(char *progname, unsigned long nargs, char** args);
+#else
 int runprogram(char *progname);
+#endif /* OPT-A2 */
 
 /* Kernel menu system. */
 void menu(char *argstr);
