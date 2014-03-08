@@ -28,7 +28,7 @@ struct spinlock spinner = { .lk_lock = 0, .lk_holder = NULL };
  * See kern/fcntl.h for information on flags.
  */
 int
-sys_open(char* filename, int flags) {
+sys_open(char* filename, int flags, int* retval) {
 	KASSERT(curproc != NULL); // Some process must be opening the file
 
 	spinlock_acquire(&spinner);
@@ -88,7 +88,8 @@ sys_open(char* filename, int flags) {
 	}
 
 	V(file_sem);
-	return fdesc;
+	*retval = fdesc;
+	return 0;
 }
 
 /*

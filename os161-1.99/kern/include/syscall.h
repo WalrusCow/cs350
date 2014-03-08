@@ -65,7 +65,7 @@ void sys__exit(int exitcode);
 #endif // UW
 
 #if OPT_A2
-int sys_open(char* filename, int flags);
+int sys_open(char* filename, int flags, int* retval);
 int sys_close(int fd, int *retval);
 int sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes);
 
