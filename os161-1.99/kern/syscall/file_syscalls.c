@@ -100,10 +100,22 @@ sys_open(char* filename, int flags) {
 int
 sys_close(int fd, int *retval) {
 
+        spinlock_acquire(&spinner);
+        if (file_sem == NULL) {
+                // Initialize the semaphore if it's not already... lol
+                file_sem = sem_create("file_sem", 1);
+        }
+        spinlock_release(&spinner);
+
+	//vnode pointer
 	struct vnode* vn;
 
+	//some process made the system call
 	KASSERT(curproc != NULL);
 
+	//acquire the mutex lock
+	P(file_sem);
+	//check valid fd
 	if((fd < 3) || (fd >= __OPEN_MAX) || (curproc->file_arr[fd] == NULL)){
 		return EBADF;
 	}
@@ -111,6 +123,7 @@ sys_close(int fd, int *retval) {
 	vn = curproc->file_arr[fd];
 	vfs_close(vn);
 	curproc->file_arr[fd] = NULL;
+	V(file_sem);
 
 	//success
 	*retval = 0;
