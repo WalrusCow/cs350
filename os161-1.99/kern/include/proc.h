@@ -39,6 +39,14 @@
 #include <spinlock.h>
 #include <thread.h> /* required for struct threadarray */
 
+#include "opt-A2.h"
+
+#if OPT_A2
+
+#include <kern/limits.h>
+
+#endif /* OPT_A2 */
+
 struct addrspace;
 struct vnode;
 #ifdef UW
@@ -59,6 +67,13 @@ struct proc {
 	/* VFS */
 	struct vnode *p_cwd;		/* current working directory */
 
+#if OPT_A2
+
+	// Array of file handlers
+	// Note: This contains stdin/stdout/stderr (as 0/1/2)
+	struct vnode* file_arr[__OPEN_MAX] = {NULL};
+
+#else
 #ifdef UW
   /* a vnode to refer to the console device */
   /* this is a quick-and-dirty way to get console writes working */
@@ -67,6 +82,7 @@ struct proc {
      it has opened, not just the console. */
   struct vnode *console;                /* a vnode for the console device */
 #endif
+#endif /* OPT_A2 */
 
 	/* add more material here as needed */
 };
