@@ -16,6 +16,9 @@
 #include <synch.h>
 #include <kern/limits.h>
 
+// Global lock for file system calls
+struct semaphore* file_sem = NULL;
+
 /*
  * handler for open() system call
  * `filename` should be a string in user space.
@@ -23,9 +26,39 @@
  */
 int
 sys_open(userptr_t filename, int flags) {
-	(void)filename;
-	(void)flags;
-	return -1;
+	if (file_sem == NULL) {
+		file_sem = sem_create("file_sem", 1);
+	}
+
+	// Default to no error
+	int err = 0;
+
+	if (filename == NULL) {
+		// Invalid pointer
+		err = EFAULT;
+		goto done;
+	}
+
+	// We need to copy filename into our memory
+	P(file_sem);
+
+	KASSERT(curproc != NULL); // Some process must be opening the file
+	// File descriptor that we will use
+	int fdesc = -1;
+
+	/* Try to find a file descriptor that is free, but don't bother
+	 * checking the stdin/stdout/stderr numbers (0/1/2) */
+	for (int i = 3; i < __OPEN_MAX; ++i) {
+		if (curproc->fh_arr[i] == NULL) {
+			// This is the one for us
+			fdesc = i;
+			break;
+		}
+	}
+
+done:
+	V(file_sem);
+	return err;
 }
 
 /*
