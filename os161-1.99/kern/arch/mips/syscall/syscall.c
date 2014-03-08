@@ -27,6 +27,7 @@
  * SUCH DAMAGE.
  */
 
+#include "opt-A2.h"
 #include <types.h>
 #include <kern/errno.h>
 #include <kern/syscall.h>
@@ -123,6 +124,12 @@ syscall(struct trapframe *tf)
 #endif // UW
 
 	    /* Add stuff here */
+
+#if OPT_A2
+	case SYS_close:
+		err = sys_close((int)tf->tf_a0, (int *)(&retval));
+		break;
+#endif /* OPT-A2 */
  
 	default:
 	  kprintf("Unknown syscall %d\n", callno);
