@@ -14,7 +14,13 @@
 #if OPT_A2
 
 #include <synch.h>
+#include <spinlock.h>
 #include <kern/limits.h>
+
+// Global lock for file system calls
+struct semaphore* file_sem = NULL;
+// Spinlock for initializing the semaphore... lol
+struct spinlock spinner = { .lk_lock = 0, .lk_holder = NULL };
 
 /*
  * handler for open() system call
@@ -22,10 +28,69 @@
  * See kern/fcntl.h for information on flags.
  */
 int
-sys_open(userptr_t filename, int flags) {
-	(void)filename;
-	(void)flags;
-	return -1;
+sys_open(char* filename, int flags) {
+	KASSERT(curproc != NULL); // Some process must be opening the file
+
+	spinlock_acquire(&spinner);
+	if (file_sem == NULL) {
+		// Initialize the semaphore if it's not already... lol
+		file_sem = sem_create("file_sem", 1);
+	}
+	spinlock_release(&spinner);
+
+	// Default to no error
+	int err = 0;
+	// What we are opening
+	struct vnode* openNode = NULL;
+
+	if (filename == NULL) {
+		return EFAULT; // Invalid pointer
+	}
+
+	char* path = kstrdup(filename);
+	KASSERT(path); // We must be able to copy this
+
+	// Entering critical section
+	P(file_sem);
+
+	// Third argument is `mode` and is currently unused
+	err = vfs_open(path, flags, 0, &openNode);
+	kfree(path); // Done with path
+
+	if (err) {
+		// Some error from vfs_open
+		V(file_sem);
+		return err;
+	}
+
+	// File descriptor that we will use
+	int fdesc = -1;
+
+	/* Try to find a file descriptor that is free, but don't bother
+	 * checking the stdin/stdout/stderr numbers (0/1/2) */
+	for (int i = 3; i < __OPEN_MAX; ++i) {
+		struct vnode* curNode = curproc->file_arr[i];
+		if (curNode == openNode) {
+			// We already have this node then
+			fdesc = i;
+			break;
+		}
+		else if (curNode == NULL && fdesc == -1) {
+			// Save the first available fdesc in case we don't
+			// find that we already have opened the file
+			// (this is usually the case)
+			fdesc = i;
+		}
+	}
+
+	if (fdesc == -1) {
+		// Process has too many open files - can't find a free fdesc
+		V(file_sem);
+		return EMFILE;
+	}
+
+	V(file_sem);
+	return err;
 }
 
 /*

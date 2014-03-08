@@ -60,12 +60,15 @@ int sys_reboot(int code);
 int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
 
 #ifdef UW
+#if OPT_A2
+#else
 int sys_write(int fdesc,userptr_t ubuf,unsigned int nbytes,int *retval);
+#endif /* OPT_A2 */
 void sys__exit(int exitcode);
 #endif // UW
 
 #if OPT_A2
-int sys_open(userptr_t filename, int flags);
+int sys_open(char* filename, int flags);
 int sys_close(int fd, int *retval);
 int sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes);
 int sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval);
