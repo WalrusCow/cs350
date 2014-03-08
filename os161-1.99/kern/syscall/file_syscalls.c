@@ -87,6 +87,7 @@ sys_open(char* filename, int flags, int* retval) {
 		return EMFILE;
 	}
 
+	curproc->file_arr[fdesc] = openNode;
 	V(file_sem);
 	*retval = fdesc;
 	return 0;
@@ -153,7 +154,6 @@ sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes) {
 
   /* set up a uio structure to refer to the user program's buffer (ubuf) */
   // read, from kernal to userspace
-  
   iov.iov_ubase = ubuf;
   iov.iov_len = nbytes;
   u.uio_iov = &iov;
@@ -184,18 +184,30 @@ sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes) {
  */
 
 int
-sys_write(int fdesc,userptr_t ubuf,unsigned int nbytes,int *retval)
+sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
 {
+
+	spinlock_acquire(&spinner);
+	if (file_sem == NULL) {
+			// Initialize the semaphore if it's not already... lol
+			file_sem = sem_create("file_sem", 1);
+	}
+	spinlock_release(&spinner);
+
   struct iovec iov;
   struct uio u;
   int res;
 
   DEBUG(DB_SYSCALL,"Syscall: write(%d,%x,%d)\n",fdesc,(unsigned int)ubuf,nbytes);
 
-  if ((fdesc<0) || (fdesc > __OPEN_MAX)||(fdesc==STDIN_FILENO)||(curproc->file_arr[fdesc] == NULL)) {
+  if ((fdesc<0) || (fdesc >= __OPEN_MAX) || (fdesc==STDIN_FILENO) || (curproc->file_arr[fdesc] == NULL)) {
+	  //DEBUG(DB_FOO, "BADF\n");
     return EBADF;
   }
-  
+
+  // Acquire lock
+  P(file_sem);
+
   KASSERT(curproc != NULL);
   KASSERT(curproc->file_arr != NULL);
   KASSERT(curproc->p_addrspace != NULL);
@@ -213,11 +225,16 @@ sys_write(int fdesc,userptr_t ubuf,unsigned int nbytes,int *retval)
 
   res = VOP_WRITE(curproc->file_arr[fdesc],&u);
   if (res) {
+	//DEBUG(DB_FOO, "VOP_WRITE error %x\n", res);
+	V(file_sem);
     return res;
   }
 
+  //DEBUG(DB_FOO, "ret:%d\n", nbytes - u.uio_resid);
+  //DEBUG(DB_FOO, "nbytes: %d -- resid: %d\n", nbytes, u.uio_resid);
   /* pass back the number of bytes actually written */
   *retval = nbytes - u.uio_resid;
   KASSERT(*retval >= 0);
+  V(file_sem);
   return 0;
 }
