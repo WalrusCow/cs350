@@ -33,9 +33,24 @@ sys_open(userptr_t filename, int flags) {
  * TODO: Add docs here
  */
 int
-sys_close(int a/* TODO */) {
-	(void)a;
-	return -1;
+sys_close(int fd, int *retval) {
+
+	struct vnode* vn;
+
+	KASSERT(curproc != NULL);
+
+	if((fd < 0) || (fd >= __OPEN_MAX) || (curproc->file_arr[fd] == NULL)){
+		return EBADF;
+	}
+
+	vn = curproc->file_arr[fd];
+	vfs_close(vn);
+	curproc->file_arr[fd] = NULL;
+
+	//success
+	*retval = 0;
+
+	return 0;
 }
 
 /*
