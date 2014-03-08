@@ -13,21 +13,8 @@
 
 #if OPT_A2
 
-#include <filehandle.h>
 #include <synch.h>
 #include <kern/limits.h>
-
-/*
- * TODO: I think that this should be per-process, as evidenced by
- * a2-hints in the `fork` section and kern/limits.h __OPEN_MAX macro.
- *
- * ... But how to make it per-process open files?
- */
-
-// Pre-allocated array of file handlers
-// Note that indices here are offset by +3 from file handle ints
-struct fh* fh_arr[__OPEN_MAX] = {NULL};
-// TODO: Initialize the array? I think so.
 
 /*
  * handler for open() system call
@@ -88,7 +75,7 @@ sys_write(int fdesc,userptr_t ubuf,unsigned int nbytes,int *retval)
     return EUNIMP;
   }
   KASSERT(curproc != NULL);
-  KASSERT(curproc->console != NULL);
+  KASSERT(curproc->file_arr[0] != NULL);
   KASSERT(curproc->p_addrspace != NULL);
 
   /* set up a uio structure to refer to the user program's buffer (ubuf) */
@@ -102,7 +89,7 @@ sys_write(int fdesc,userptr_t ubuf,unsigned int nbytes,int *retval)
   u.uio_rw = UIO_WRITE;
   u.uio_space = curproc->p_addrspace;
 
-  res = VOP_WRITE(curproc->console,&u);
+  res = VOP_WRITE(curproc->file_arr[0],&u);
   if (res) {
     return res;
   }

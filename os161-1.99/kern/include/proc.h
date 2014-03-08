@@ -71,7 +71,7 @@ struct proc {
 
 	// Array of file handlers
 	// Note: This contains stdin/stdout/stderr (as 0/1/2)
-	struct vnode* file_arr[__OPEN_MAX] = {NULL};
+	struct vnode* file_arr[__OPEN_MAX];
 
 #else
 #ifdef UW

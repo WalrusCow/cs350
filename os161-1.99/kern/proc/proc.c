@@ -100,7 +100,10 @@ proc_create(const char *name)
 	proc->p_cwd = NULL;
 
 #if OPT_A2
-	proc->file_arr = {NULL};
+	// Initialize array to NULL pointers
+	for (int i = 0; i < __OPEN_MAX; ++i) {
+		proc->file_arr[i] = NULL;
+	}
 #else
 #ifdef UW
 	proc->console = NULL;
@@ -161,11 +164,21 @@ proc_destroy(struct proc *proc)
 	}
 #endif // UW
 
+#if OPT_A2
+	// Close all open files
+	for (int i = 0; i < __OPEN_MAX; ++i) {
+		if (proc->file_arr[i]) {
+			vfs_close(proc->file_arr[i]);
+		}
+	}
+#else
+
 #ifdef UW
 	if (proc->console) {
 	  vfs_close(proc->console);
 	}
 #endif // UW
+#endif /* OPT_A2 */
 
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
@@ -231,6 +244,21 @@ proc_create_runprogram(const char *name)
 		return NULL;
 	}
 
+#if OPT_A2
+	/* open the console - this should always succeed */
+	console_path = kstrdup("con:");
+	if (console_path == NULL) {
+	  panic("unable to copy console path name during process creation\n");
+	}
+	if (vfs_open(console_path,O_WRONLY,0,&(proc->file_arr[0]))) {
+	  panic("unable to open the console during process creation\n");
+	}
+	// Console is all stdin/stdout/stderr
+	proc->file_arr[1] = proc->file_arr[0];
+	proc->file_arr[2] = proc->file_arr[0];
+	kfree(console_path);
+#else
+
 #ifdef UW
 	/* open the console - this should always succeed */
 	console_path = kstrdup("con:");
@@ -242,6 +270,7 @@ proc_create_runprogram(const char *name)
 	}
 	kfree(console_path);
 #endif // UW
+#endif /* OPT_A2 */
 
 	/* VM fields */
 
