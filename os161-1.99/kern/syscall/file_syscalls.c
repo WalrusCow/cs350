@@ -39,7 +39,7 @@ sys_close(int fd, int *retval) {
 
 	KASSERT(curproc != NULL);
 
-	if((fd < 0) || (fd >= __OPEN_MAX) || (curproc->file_arr[fd] == NULL)){
+	if((fd < 3) || (fd >= __OPEN_MAX) || (curproc->file_arr[fd] == NULL)){
 		return EBADF;
 	}
 
