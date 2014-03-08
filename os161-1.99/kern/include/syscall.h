@@ -68,7 +68,7 @@ void sys__exit(int exitcode);
 int sys_open(userptr_t filename, int flags);
 int sys_close(int a/* TODO */);
 int sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes);
-int sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval);
+
 #endif /* OPT_A2 */
 
 #endif /* _SYSCALL_H_ */
