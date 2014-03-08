@@ -17,6 +17,8 @@
 #include <spinlock.h>
 #include <kern/limits.h>
 
+extern int errno;
+
 // Global lock for file system calls
 struct semaphore* file_sem = NULL;
 // Spinlock for initializing the semaphore... lol
@@ -38,13 +40,12 @@ sys_open(char* filename, int flags) {
 	}
 	spinlock_release(&spinner);
 
-	// Default to no error
-	int err = 0;
 	// What we are opening
 	struct vnode* openNode = NULL;
 
 	if (filename == NULL) {
-		return EFAULT; // Invalid pointer
+		errno = EFAULT // Invalid pointer;
+		return -1;
 	}
 
 	char* path = kstrdup(filename);
@@ -54,13 +55,14 @@ sys_open(char* filename, int flags) {
 	P(file_sem);
 
 	// Third argument is `mode` and is currently unused
-	err = vfs_open(path, flags, 0, &openNode);
+	int err = vfs_open(path, flags, 0, &openNode);
 	kfree(path); // Done with path
 
 	if (err) {
 		// Some error from vfs_open
 		V(file_sem);
-		return err;
+		errno = err;
+		return -1;
 	}
 
 	// File descriptor that we will use
@@ -86,11 +88,12 @@ sys_open(char* filename, int flags) {
 	if (fdesc == -1) {
 		// Process has too many open files - can't find a free fdesc
 		V(file_sem);
-		return EMFILE;
+		errno = EMFILE;
+		return -1;
 	}
 
 	V(file_sem);
-	return err;
+	return fdesc;
 }
 
 /*
