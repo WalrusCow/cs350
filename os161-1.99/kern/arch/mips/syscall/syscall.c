@@ -36,6 +36,7 @@
 #include <current.h>
 #include <syscall.h>
 
+#include "opt-A2.h"
 
 /*
  * System call dispatcher.
@@ -122,8 +123,27 @@ syscall(struct trapframe *tf)
 	  break;
 #endif // UW
 
-	    /* Add stuff here */
- 
+#if OPT_A2
+
+	case SYS_read:
+	  // Call actual read function
+	  err = sys_read(1); // TODO
+	  break;
+
+	case SYS_open:
+	  // Call actual open function
+	  err = sys_open((userptr_t)tf->tf_a0, (int)tf->tf_a1);
+	  break;
+
+	case SYS_close:
+	  // Call actual close function
+	  err = sys_close(1); // TODO
+	  break;
+
+#endif /* OPT_A2 */
+
+	/* Add stuff here */
+
 	default:
 	  kprintf("Unknown syscall %d\n", callno);
 	  err = ENOSYS;
