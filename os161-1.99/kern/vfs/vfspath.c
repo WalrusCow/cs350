@@ -39,6 +39,7 @@
 #include <vfs.h>
 #include <vnode.h>
 
+#include "opt-A2.h"
 
 /* Does most of the work for open(). */
 int
@@ -63,11 +64,20 @@ vfs_open(char *path, int openflags, mode_t mode, struct vnode **ret)
 		return EINVAL;
 	}
 
+#if OPT_A2
+
+	if (openflags & O_APPEND) {
+		// Append is not implemented - return unimplemented error
+		return EUNIMP;
+	}
+
+#endif /* OPT_A2 */
+
 	if (openflags & O_CREAT) {
 		char name[NAME_MAX+1];
 		struct vnode *dir;
 		int excl = (openflags & O_EXCL)!=0;
-		
+
 		result = vfs_lookparent(path, &dir, name, sizeof(name));
 		if (result) {
 			return result;
@@ -94,7 +104,7 @@ vfs_open(char *path, int openflags, mode_t mode, struct vnode **ret)
 	}
 
 	VOP_INCOPEN(vn);
-	
+
 	if (openflags & O_TRUNC) {
 		if (canwrite==0) {
 			result = EINVAL;
@@ -143,7 +153,7 @@ vfs_remove(char *path)
 	struct vnode *dir;
 	char name[NAME_MAX+1];
 	int result;
-	
+
 	result = vfs_lookparent(path, &dir, name, sizeof(name));
 	if (result) {
 		return result;
@@ -164,7 +174,7 @@ vfs_rename(char *oldpath, char *newpath)
 	struct vnode *newdir;
 	char newname[NAME_MAX+1];
 	int result;
-	
+
 	result = vfs_lookparent(oldpath, &olddir, oldname, sizeof(oldname));
 	if (result) {
 		return result;
@@ -175,7 +185,7 @@ vfs_rename(char *oldpath, char *newpath)
 		return result;
 	}
 
-	if (olddir->vn_fs==NULL || newdir->vn_fs==NULL || 
+	if (olddir->vn_fs==NULL || newdir->vn_fs==NULL ||
 	    olddir->vn_fs != newdir->vn_fs) {
 		VOP_DECREF(newdir);
 		VOP_DECREF(olddir);
