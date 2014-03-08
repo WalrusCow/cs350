@@ -127,15 +127,16 @@ sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes) {
   
   struct iovec iov;
   struct uio u;
+  int res;
 
   DEBUG(DB_SYSCALL,"Syscall: read(%d,%x,%d)\n",fdesc,(unsigned int)ubuf,nbytes);
 
-  /* only stdout and stderr writes are currently implemented */
-  if (!((fdesc==STDOUT_FILENO)||(fdesc==STDERR_FILENO))) {
-    return EUNIMP;
+  if ((fdesc<0) || (fdesc > __OPEN_MAX)||(fdesc==STDOUT_FILENO)||(fdesc==STDERR_FILENO)||(curproc->file_arr[fdesc] == NULL)) {
+    return EBADF; // make sure it's not std out/err/or anything not belong to this file
   }
+  
   KASSERT(curproc != NULL); // current process
-  KASSERT(curproc->console != NULL);
+  KASSERT(curproc->file_arr != NULL);
   KASSERT(curproc->p_addrspace != NULL);
 
   /* set up a uio structure to refer to the user program's buffer (ubuf) */
@@ -151,10 +152,9 @@ sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes) {
   u.uio_rw = UIO_READ; // from kernel to uio_seg
   u.uio_space = curproc->p_addrspace;
 
-  res = VOP_READ(curproc->console,&u);
-  if (res) {
-    return res;
-  }
+  res = VOP_READ(curproc->file_arr[fdesc],&u);
+  
+  return res; // error or success;
 
 }
 
@@ -180,12 +180,12 @@ sys_write(int fdesc,userptr_t ubuf,unsigned int nbytes,int *retval)
 
   DEBUG(DB_SYSCALL,"Syscall: write(%d,%x,%d)\n",fdesc,(unsigned int)ubuf,nbytes);
 
-  /* only stdout and stderr writes are currently implemented */
-  if (!((fdesc==STDOUT_FILENO)||(fdesc==STDERR_FILENO))) {
-    return EUNIMP;
+  if ((fdesc<0) || (fdesc > __OPEN_MAX)||(fdesc==STDIN_FILENO)||(curproc->file_arr[fdesc] == NULL)) {
+    return EBADF;
   }
+  
   KASSERT(curproc != NULL);
-  KASSERT(curproc->file_arr[0] != NULL);
+  KASSERT(curproc->file_arr != NULL);
   KASSERT(curproc->p_addrspace != NULL);
 
   /* set up a uio structure to refer to the user program's buffer (ubuf) */
@@ -199,7 +199,7 @@ sys_write(int fdesc,userptr_t ubuf,unsigned int nbytes,int *retval)
   u.uio_rw = UIO_WRITE;
   u.uio_space = curproc->p_addrspace;
 
-  res = VOP_WRITE(curproc->file_arr[0],&u);
+  res = VOP_WRITE(curproc->file_arr[fdesc],&u);
   if (res) {
     return res;
   }
