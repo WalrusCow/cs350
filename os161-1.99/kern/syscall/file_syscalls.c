@@ -38,8 +38,6 @@ sys_open(char* filename, int flags) {
 	}
 	spinlock_release(&spinner);
 
-	// Default to no error
-	int err = 0;
 	// What we are opening
 	struct vnode* openNode = NULL;
 
@@ -54,7 +52,7 @@ sys_open(char* filename, int flags) {
 	P(file_sem);
 
 	// Third argument is `mode` and is currently unused
-	err = vfs_open(path, flags, 0, &openNode);
+	int err = vfs_open(path, flags, 0, &openNode);
 	kfree(path); // Done with path
 
 	if (err) {
@@ -90,7 +88,7 @@ sys_open(char* filename, int flags) {
 	}
 
 	V(file_sem);
-	return err;
+	return fdesc;
 }
 
 /*
