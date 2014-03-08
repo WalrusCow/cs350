@@ -42,7 +42,7 @@ sys_open(char* filename, int flags) {
 	struct vnode* openNode = NULL;
 
 	if (filename == NULL) {
-		return EFAULT; // Invalid pointer;
+		return EFAULT; // Invalid pointer
 	}
 
 	char* path = kstrdup(filename);
