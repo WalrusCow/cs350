@@ -27,6 +27,7 @@
  * SUCH DAMAGE.
  */
 
+#include "opt-A2.h"
 #include <types.h>
 #include <kern/errno.h>
 #include <kern/syscall.h>
@@ -123,6 +124,8 @@ syscall(struct trapframe *tf)
 	  break;
 #endif // UW
 
+	    /* Add stuff here */
+
 #if OPT_A2
 
 	case SYS_read:
@@ -136,10 +139,8 @@ syscall(struct trapframe *tf)
 	  break;
 
 	case SYS_close:
-	  // Call actual close function
-	  err = sys_close(1); // TODO
-	  break;
-
+                err = sys_close((int)tf->tf_a0, (int *)(&retval));
+                break;
 #endif /* OPT_A2 */
 
 	/* Add stuff here */

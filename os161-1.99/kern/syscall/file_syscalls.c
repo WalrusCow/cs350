@@ -98,9 +98,24 @@ sys_open(char* filename, int flags) {
  * TODO: Add docs here
  */
 int
-sys_close(int a/* TODO */) {
-	(void)a;
-	return -1;
+sys_close(int fd, int *retval) {
+
+	struct vnode* vn;
+
+	KASSERT(curproc != NULL);
+
+	if((fd < 0) || (fd >= __OPEN_MAX) || (curproc->file_arr[fd] == NULL)){
+		return EBADF;
+	}
+
+	vn = curproc->file_arr[fd];
+	vfs_close(vn);
+	curproc->file_arr[fd] = NULL;
+
+	//success
+	*retval = 0;
+
+	return 0;
 }
 
 /*
@@ -108,9 +123,39 @@ sys_close(int a/* TODO */) {
  * TODO: Add docs here
  */
 int
-sys_read(int a/* TODO */) {
-	(void)a;
-	return -1;
+sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes) {
+  
+  struct iovec iov;
+  struct uio u;
+
+  DEBUG(DB_SYSCALL,"Syscall: read(%d,%x,%d)\n",fdesc,(unsigned int)ubuf,nbytes);
+
+  /* only stdout and stderr writes are currently implemented */
+  if (!((fdesc==STDOUT_FILENO)||(fdesc==STDERR_FILENO))) {
+    return EUNIMP;
+  }
+  KASSERT(curproc != NULL); // current process
+  KASSERT(curproc->console != NULL);
+  KASSERT(curproc->p_addrspace != NULL);
+
+  /* set up a uio structure to refer to the user program's buffer (ubuf) */
+  // read, from kernal to userspace
+  
+  iov.iov_ubase = ubuf;
+  iov.iov_len = nbytes;
+  u.uio_iov = &iov;
+  u.uio_iovcnt = 1;
+  u.uio_offset = 0;  /* not needed for the console */
+  u.uio_resid = nbytes; // initialized to total amount of data
+  u.uio_segflg = UIO_USERSPACE; // user process data
+  u.uio_rw = UIO_READ; // from kernel to uio_seg
+  u.uio_space = curproc->p_addrspace;
+
+  res = VOP_READ(curproc->console,&u);
+  if (res) {
+    return res;
+  }
+
 }
 
 #endif
