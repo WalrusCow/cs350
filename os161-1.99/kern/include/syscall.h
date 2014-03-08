@@ -60,10 +60,7 @@ int sys_reboot(int code);
 int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
 
 #ifdef UW
-#if OPT_A2
-#else
 int sys_write(int fdesc,userptr_t ubuf,unsigned int nbytes,int *retval);
-#endif /* OPT_A2 */
 void sys__exit(int exitcode);
 #endif // UW
 
