@@ -51,8 +51,8 @@ sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes) {
 
   DEBUG(DB_SYSCALL,"Syscall: read(%d,%x,%d)\n",fdesc,(unsigned int)ubuf,nbytes);
 
-  if ((fdesc==STDOUT_FILENO)||(fdesc==STDERR_FILENO)||(curproc->file_arr[fdesc] == NULL)) {
-    return EUNIMP; // make sure it's not std out/err/or anything not belong to this file
+  if ((fdesc<0) || (fdesc > __OPEN_MAX)||(fdesc==STDOUT_FILENO)||(fdesc==STDERR_FILENO)||(curproc->file_arr[fdesc] == NULL)) {
+    return EBADF; // make sure it's not std out/err/or anything not belong to this file
   }
   
   KASSERT(curproc != NULL); // current process
@@ -100,8 +100,8 @@ sys_write(int fdesc,userptr_t ubuf,unsigned int nbytes,int *retval)
 
   DEBUG(DB_SYSCALL,"Syscall: write(%d,%x,%d)\n",fdesc,(unsigned int)ubuf,nbytes);
 
-  if ((fdesc==STDIN_FILENO)||(curproc->file_arr[fdesc] == NULL)) {
-    return EUNIMP;
+  if ((fdesc<0) || (fdesc > __OPEN_MAX)||(fdesc==STDIN_FILENO)||(curproc->file_arr[fdesc] == NULL)) {
+    return EBADF;
   }
   
   KASSERT(curproc != NULL);
