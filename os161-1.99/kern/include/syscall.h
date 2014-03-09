@@ -72,7 +72,6 @@ int sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval);
 pit_d sys_getpid(pid_t* retval);
 pid_t sys_fork(pid_t* retval);
 pid_t sys_waitpid(pid_t pid, int* ret, int options);
-void sys__exit(int exitcode);
 
 #endif /* OPT_A2 */
 
