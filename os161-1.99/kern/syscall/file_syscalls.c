@@ -160,12 +160,12 @@ sys_open(char* filename, int flags, int* retval) {
 int
 sys_close(int fd) {
 
-//        spinlock_acquire(&spinner);
-//        if (file_sem == NULL) {
+        spinlock_acquire(&spinner);
+        if (file_sem == NULL) {
                 // Initialize the semaphore if it's not already... lol
-//                file_sem = sem_create("file_sem", 1);
-//        }
-//        spinlock_release(&spinner);
+                file_sem = sem_create("file_sem", 1);
+        }
+        spinlock_release(&spinner);
 
 	//vnode pointer
 	struct vnode* vn;
@@ -174,16 +174,33 @@ sys_close(int fd) {
 	KASSERT(curproc != NULL);
 
 	//acquire the mutex lock
-//	P(file_sem);
+	P(file_sem);
 	//check valid fd
-	if((fd < 3) || (fd >= __OPEN_MAX) || (curproc->file_arr[fd] == NULL)){
+	if((fd < 3) || (fd >= __OPEN_MAX) || (curproc->file_arr[fd] == NULL) || (curproc->file_arr[fd]->vn == NULL)){
 		return EBADF;
 	}
 
+	//free the current process file handler
 	vn = curproc->file_arr[fd]->vn;
 	vfs_close(vn);
+	curproc->file_arr[fd]->vn = NULL;
+
+	int index = curproc->file_arr[fd]->fd;
+
+	kfree(curproc->file_arr[fd]);
 	curproc->file_arr[fd] = NULL;
-//	V(file_sem);
+
+	//check the system file handler, if no process use this, free it
+	if(sysFH_table[index]->vn == NULL){
+		if(sysFH_table[index]->vn_mutex != NULL){
+			sem_destroy(sysFH_table[index]->vn_mutex);
+		}
+	}
+
+	kfree(sysFH_table[index]);
+	sysFH_table[index] = NULL;
+
+	V(file_sem);
 
 	//success
 
