@@ -69,6 +69,8 @@ int sys_open(char* filename, int flags, int* retval);
 int sys_close(int fd, int *retval);
 int sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval);
 
+int sys_getpid(pid_t* retval);
+
 #endif /* OPT_A2 */
 
 #endif /* _SYSCALL_H_ */
