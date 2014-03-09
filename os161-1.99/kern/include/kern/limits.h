@@ -91,7 +91,10 @@
  */
 
 /* Max open files per process */
-#define __OPEN_MAX      128
+#define __OPEN_MAX      32
+
+/* Max open files in the system */
+#define __SYS_OPEN_MAX    1024
 
 /* Max number of iovec structures at once for readv/writev/preadv/pwritev */
 #define __IOV_MAX       1024
