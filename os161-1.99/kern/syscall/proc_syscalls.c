@@ -29,9 +29,29 @@ void sys__exit(int exitcode) {
   struct proc *p = curproc;
   /* for now, just include this to keep the compiler from complaining about
      an unused variable */
+
+#if OPT_A2
+#else
   (void)exitcode;
+#endif /* OPT-A2 */
 
   DEBUG(DB_SYSCALL,"Syscall: _exit(%d)\n",exitcode);
+
+#if OPT_A2
+	//current process should not be NULL
+	KASSERT(curproc != NULL);
+
+	//update the fields of the current process
+        curproc->exitCode = exitcode;
+        curproc->isDone = true;
+	if(curproc->codePtr != NULL){
+		*(curproc->codePtr) = exitcode;
+	}
+
+	//signal the wait
+        V(p->parentWait);
+
+#endif /* OPT-A2 */
 
   KASSERT(curproc->p_addrspace != NULL);
   as_deactivate();
