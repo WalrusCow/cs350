@@ -58,6 +58,15 @@
  */
 struct proc *kproc;
 
+#if OPT_A2
+
+// Table to map PIDs to proc structures
+// Note that pidTable[0] == pidTable[1] == NULL, because
+// those PIDs cannot be assigned to a user process
+struct proc* pidTable[__PID_MAX + 1] = {NULL};
+
+#endif /* OPT_A2 */
+
 /*
  * Mechanism for making the kernel menu thread sleep while processes are running
  */

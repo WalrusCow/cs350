@@ -97,6 +97,15 @@ struct proc {
 	/* add more material here as needed */
 };
 
+#if OPT_A2
+
+// Table to map PIDs to proc structures
+// Note that pidTable[0] == pidTable[1] == NULL, because
+// those PIDs cannot be assigned to a user process
+extern struct proc* pidTable[__PID_MAX + 1];
+
+#endif /* OPT_A2 */
+
 /* This is the process structure for the kernel and for kernel-only threads. */
 extern struct proc *kproc;
 

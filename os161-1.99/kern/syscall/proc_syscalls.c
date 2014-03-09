@@ -11,14 +11,10 @@
 #include "opt-A2.h"
 
 #if OPT_A2
+
 #include <synch.h>
 
-// Table of PIDs and what process they belong to
-// Note that pidTable[0] == pidTable[1] == NULL, because
-// those PIDs cannot be assigned to a user process
-// TODO: How to make this visible to proc.c ?
-struct proc* pidTable[__PID_MAX + 1] = {NULL};
-#endif
+#endif /* OPT_A2 */
 
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
