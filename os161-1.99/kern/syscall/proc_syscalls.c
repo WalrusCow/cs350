@@ -10,6 +10,16 @@
 
 #include "opt-A2.h"
 
+#if OPT_A2
+#include <synch.h>
+
+// Table of PIDs and what process they belong to
+// Note that pidTable[0] == pidTable[1] == NULL, because
+// those PIDs cannot be assigned to a user process
+// TODO: How to make this visible to proc.c ?
+struct proc* pidTable[__PID_MAX + 1] = {NULL};
+#endif
+
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
 
@@ -49,9 +59,69 @@ void sys__exit(int exitcode) {
 }
 
 #if OPT_A2
-int sys_getpid(pid_t* retval) {
+int
+sys_getpid(pid_t* retval) {
 	*retval = curproc->pid;
 	return 0;
 }
 
+int
+sys_fork(pid_t* retval) {
+	// TODO: THIS IS NOT CORRECT: child must not start until
+	// this function is done.  maybe we need to copy out
+	// a subset of this function
+	struct proc* child = proc_create_runprogram(curproc->p_name);
+
+	if (child == NULL) {
+		*retval = 0;
+		return -1;
+	}
+
+	// Copy open files (by reference)
+	for (int i = 0; i < __OPEN_MAX; ++i) {
+		child->file_arr[i] = curproc->file_arr[i];
+	}
+
+	child->parent = curproc;
+	*retval = child->pid; // TODO: Different ret val for parent & child
+	return 0;
+}
+
+int
+sys_waitpid(pid_t pid, int* ret, int options) {
+	if (ret == NULL) {
+		return EFAULT; // Invalid pointer
+	}
+	if (pid < __PID_MIN || pid > __PID_MAX) {
+		return ESRCH; // Invalid PID
+	}
+	if (options) {
+		return EINVAL; // We don't support any options
+	}
+
+	// Check if valid
+	struct proc* p = pidTable[pid];
+	if (p == NULL) {
+		return ESRCH; // No process
+	}
+
+	if (p->parent != curproc) {
+		return ECHILD; // Can only wait on children
+	}
+
+	// Check if proc already done (then no need to wait)
+	if (p->isDone) {
+		*ret = p->exitCode;
+		return 0;
+	}
+
+	// Tell the child where to store the exit code
+	p->codePtr = ret;
+	// Now wait on the child's semaphore
+	P(p->parentWait);
+	// Once we have the semaphore, just release it and return
+	// since the return value has already been sent
+	V(p->parentWait);
+	return 0;
+}
 #endif /* OPT_A2 */
