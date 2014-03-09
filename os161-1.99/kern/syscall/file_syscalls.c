@@ -136,7 +136,7 @@ sys_close(int fd, int *retval) {
  * TODO: Add docs here
  */
 int
-sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes) {
+sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval) {
 
 	spinlock_acquire(&spinner);
  	if (file_sem == NULL) {
@@ -175,6 +175,11 @@ sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes) {
   u.uio_space = curproc->p_addrspace;
 
   res = VOP_READ(curproc->file_arr[fdesc],&u);
+  if(res){
+	return res;
+  }
+  *retval = nbytes -u.uio_resid;
+  KASSERT(*retval >= 0);
   V(file_sem);
   
   return res; // error or success;
