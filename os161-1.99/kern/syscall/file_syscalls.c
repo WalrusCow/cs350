@@ -18,9 +18,9 @@
 #include <kern/limits.h>
 
 // Global lock for file system calls
-//struct semaphore* file_sem = NULL;
+struct semaphore* file_sem = NULL;
 // Spinlock for initializing the semaphore... lol
-//struct spinlock spinner = { .lk_lock = 0, .lk_holder = NULL };
+struct spinlock spinner = { .lk_lock = 0, .lk_holder = NULL };
 
 //system file handler
 struct sysFH{
@@ -39,12 +39,12 @@ int
 sys_open(char* filename, int flags, int* retval) {
 	KASSERT(curproc != NULL); // Some process must be opening the file
 
-//	spinlock_acquire(&spinner);
-//	if (file_sem == NULL) {
+	spinlock_acquire(&spinner);
+	if (file_sem == NULL) {
 		// Initialize the semaphore if it's not already... lol
-//		file_sem = sem_create("file_sem", 1);
-//	}
-//	spinlock_release(&spinner);
+		file_sem = sem_create("file_sem", 1);
+	}
+	spinlock_release(&spinner);
 
 	// What we are opening
 	struct vnode* openNode = NULL;
@@ -57,7 +57,7 @@ sys_open(char* filename, int flags, int* retval) {
 	KASSERT(path); // We must be able to copy this
 
 	// Entering critical section
-//	P(file_sem);
+	P(file_sem);
 
 	// Third argument is `mode` and is currently unused
 	int err = vfs_open(path, flags, 0, &openNode);
@@ -65,7 +65,7 @@ sys_open(char* filename, int flags, int* retval) {
 
 	if (err) {
 		// Some error from vfs_open
-//		V(file_sem);
+		V(file_sem);
 		return err;
 	}
 
@@ -74,29 +74,81 @@ sys_open(char* filename, int flags, int* retval) {
 
 	/* Try to find a file descriptor that is free, but don't bother
 	 * checking the stdin/stdout/stderr numbers (0/1/2) */
-	for (int i = 3; i < __OPEN_MAX; ++i) {
-		struct vnode* curNode = curproc->file_arr[i]->vn;
-		if (curNode == openNode) {
+	for (int i = 3; i < __SYS_OPEN_MAX; ++i) {
+		if (sysFH_table[i] == NULL) {
+			// Save first open fdesc if none yet
+			if (fdesc == -1) fdesc = i;
+		}
+		else if (sysFH_table[i]->vn == openNode) {
 			// We already have this node then
 			fdesc = i;
 			break;
 		}
-		else if (curNode == NULL && fdesc == -1) {
-			// Save the first available fdesc in case we don't
-			// find that we already have opened the file
-			// (this is usually the case)
-			fdesc = i;
-		}
 	}
 
 	if (fdesc == -1) {
-		// Process has too many open files - can't find a free fdesc
-//		V(file_sem);
+		// System has too many open files - can't find a free fdesc
+		V(file_sem);
 		return EMFILE;
 	}
 
-	curproc->file_arr[fdesc]->vn = openNode;
-//	V(file_sem);
+	int procIndex = -1;
+	// Now check that process has free space
+	for (int i = 3; i < __OPEN_MAX; ++i) {
+		if (curproc->file_arr[i] == NULL) {
+			procIndex = i;
+			break;
+		}
+	}
+
+	if (procIndex == -1) {
+		// Process has too many open files
+		V(file_sem);
+		return ENFILE;
+	}
+
+	// Allocate the new process file handler
+	struct procFH* new_proc_fh = kmalloc(sizeof(struct procFH));
+	if (new_proc_fh == NULL) {
+		// No memory for process fh
+		V(file_sem);
+		return EMFILE;
+	}
+	new_proc_fh->vn = openNode;
+	new_proc_fh->offset = 0; // Start at 0 always
+	new_proc_fh->fd = fdesc; // Store file descriptor
+
+	// Allocate the new semaphore for this file
+	struct semaphore* new_vnode_sem = sem_create("vnode_sem", 1);
+	if (new_vnode_sem == NULL) {
+		// No memory for semaphore
+		V(file_sem);
+		kfree(new_proc_fh);
+		return EMFILE;
+	}
+
+	// Allocate the new system file handler
+	struct sysFH* new_sys_fh = kmalloc(sizeof(struct sysFH));
+	if (new_sys_fh == NULL) {
+		// No memory for system fh
+		V(file_sem);
+		kfree(new_proc_fh);
+		sem_destroy(new_vnode_sem);
+		return EMFILE;
+	}
+
+	// Store the ptr to vnode and the lock for this vnode
+	new_sys_fh->vn = openNode;
+	new_sys_fh->vn_mutex = new_vnode_sem;
+
+	// Save the results to the process table and the system table
+	curproc->file_arr[procIndex] = new_proc_fh;
+	sysFH_table[fdesc] = new_sys_fh;
+
+	// Release the lock
+	V(file_sem);
+
+	// Return the file descriptor
 	*retval = fdesc;
 	return 0;
 }
