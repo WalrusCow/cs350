@@ -69,9 +69,10 @@ int sys_open(char* filename, int flags, int* retval);
 int sys_close(int fd, int *retval);
 int sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval);
 
-int sys_getpid(pid_t* retval);
-int sys_fork(pid_t* retval);
-int sys_waitpid(pid_t pid, int* ret, int options);
+pit_d sys_getpid(pid_t* retval);
+pid_t sys_fork(pid_t* retval);
+pid_t sys_waitpid(pid_t pid, int* ret, int options);
+void sys__exit(int exitcode);
 
 #endif /* OPT_A2 */
 
