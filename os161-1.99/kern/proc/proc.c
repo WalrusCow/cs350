@@ -53,6 +53,10 @@
 
 #include "opt-A2.h"
 
+#if OPT_A2
+#include <syscall.h>
+#endif /* OPT-A2 */
+
 /*
  * The process for the kernel; this holds all the kernel-only threads.
  */
@@ -189,7 +193,7 @@ proc_destroy(struct proc *proc)
 	// Close all open files
 	for (int i = 2; i < __OPEN_MAX; ++i) {
 		if (proc->file_arr[i]) {
-			vfs_close(proc->file_arr[i]);
+			sys_close(i);
 		}
 	}
 #else
@@ -271,7 +275,7 @@ proc_create_runprogram(const char *name)
 	if (console_path == NULL) {
 	  panic("unable to copy console path name during process creation\n");
 	}
-	if (vfs_open(console_path,O_WRONLY,0,&(proc->file_arr[0]))) {
+	if (vfs_open(console_path,O_WRONLY,0,&(proc->file_arr[0]->vn))) {
 	  panic("unable to open the console during process creation\n");
 	}
 	// Console is all stdin/stdout/stderr
