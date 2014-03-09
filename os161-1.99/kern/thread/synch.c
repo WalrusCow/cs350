@@ -285,14 +285,14 @@ rw_create(const char *name)
 		return NULL;
 	}
 	
-	rwlock -> mutex = sem_create(kstrdup(name),1); // mutex
+	rwlock -> mutex = sem_create(name,1); // mutex
 	if(rwlock-> mutex == NULL){
 		kfree(rwlock->name);
 		kfree(rwlock);
 		return NULL;
 	}
 	
-	rwlock -> readerl = sem_create(kstrdup(name),1); // mutex
+	rwlock -> readerl = sem_create(name,1); // mutex
 	if(rwlock-> readerl == NULL){
 		kfree(rwlock->mutex);
 		kfree(rwlock->name);
