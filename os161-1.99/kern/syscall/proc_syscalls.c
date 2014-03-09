@@ -59,13 +59,13 @@ void sys__exit(int exitcode) {
 }
 
 #if OPT_A2
-pid_t
+int
 sys_getpid(pid_t* retval) {
 	*retval = curproc->pid;
 	return 0;
 }
 
-pid_t
+int
 sys_fork(pid_t* retval) {
 	// TODO: THIS IS NOT CORRECT: child must not start until
 	// this function is done.  maybe we need to copy out
@@ -87,7 +87,7 @@ sys_fork(pid_t* retval) {
 	return 0;
 }
 
-pid_t
+int
 sys_waitpid(pid_t pid, int* ret, int options) {
 	if (ret == NULL) {
 		return EFAULT; // Invalid pointer
