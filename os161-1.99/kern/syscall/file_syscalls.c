@@ -89,20 +89,22 @@ sys_open(char* filename, int flags, int* retval) {
 	if (fdesc == -1) {
 		// System has too many open files - can't find a free fdesc
 		V(file_sem);
+		vfs_close(openNode);
 		return EMFILE;
 	}
 
-	int procIndex = -1;
+	int proc_fdesc = -1;
 	// Now check that process has free space
 	for (int i = 3; i < __OPEN_MAX; ++i) {
 		if (curproc->file_arr[i] == NULL) {
-			procIndex = i;
-			break;
+			// Save index in case
+			if (proc_fdesc == -1) proc_fdesc = i;
 		}
 	}
 
-	if (procIndex == -1) {
+	if (proc_fdesc == -1) {
 		// Process has too many open files
+		vfs_close(openNode);
 		V(file_sem);
 		return ENFILE;
 	}
@@ -142,14 +144,14 @@ sys_open(char* filename, int flags, int* retval) {
 	new_sys_fh->vn_mutex = new_vnode_sem;
 
 	// Save the results to the process table and the system table
-	curproc->file_arr[procIndex] = new_proc_fh;
+	curproc->file_arr[proc_fdesc] = new_proc_fh;
 	sysFH_table[fdesc] = new_sys_fh;
 
 	// Release the lock
 	V(file_sem);
 
-	// Return the file descriptor
-	*retval = fdesc;
+	// Return the file descriptor (relative to the process)
+	*retval = proc_fdesc;
 	return 0;
 }
 
@@ -279,12 +281,12 @@ int
 sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
 {
 
-//	spinlock_acquire(&spinner);
-//	if (file_sem == NULL) {
-			// Initialize the semaphore if it's not already... lol
-//			file_sem = sem_create("file_sem", 1);
-//	}
-//	spinlock_release(&spinner);
+	spinlock_acquire(&spinner);
+	if (file_sem == NULL) {
+		// Initialize the semaphore if it's not already... lol
+		file_sem = sem_create("file_sem", 1);
+	}
+	spinlock_release(&spinner);
 
   struct iovec iov;
   struct uio u;
@@ -292,16 +294,27 @@ sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
 
   DEBUG(DB_SYSCALL,"Syscall: write(%d,%x,%d)\n",fdesc,(unsigned int)ubuf,nbytes);
 
-  if ((fdesc<0) || (fdesc >= __OPEN_MAX) || (fdesc==STDIN_FILENO) || (curproc->file_arr[fdesc] == NULL)) {
+  if ((fdesc < 0) || (fdesc >= __OPEN_MAX) || (fdesc==STDIN_FILENO)) {
 	  //DEBUG(DB_FOO, "BADF\n");
     return EBADF;
   }
 
-  // Acquire lock
-//  P(file_sem);
+  // Acquire table lock for lookup
+  P(file_sem);
+  struct procFH* p_fh = curproc->file_arr[fdesc];
+  if (p_fh == NULL) {
+	  return EBADF;
+  }
+
+  // System FH for this
+  struct sysFH* sys_fh = sysFH_table[p_fh->fd];
+
+  // Acquire the lock for this vnode
+  P(sys_fh->vn_mutex);
+
+  V(file_sem);
 
   KASSERT(curproc != NULL);
-  KASSERT(curproc->file_arr != NULL);
   KASSERT(curproc->p_addrspace != NULL);
 
   /* set up a uio structure to refer to the user program's buffer (ubuf) */
@@ -309,25 +322,34 @@ sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
   iov.iov_len = nbytes;
   u.uio_iov = &iov;
   u.uio_iovcnt = 1;
-  u.uio_offset = 0;  /* not needed for the console */
+  // TODO: Does this offset need to be something else?
+  // i.e. does it always need to be 0 but we need to call some VOP to
+  // shift our posn in the file first?
+  u.uio_offset = p_fh->offset; // Set appropriate offset
   u.uio_resid = nbytes;
   u.uio_segflg = UIO_USERSPACE;
   u.uio_rw = UIO_WRITE;
   u.uio_space = curproc->p_addrspace;
 
-  res = VOP_WRITE(curproc->file_arr[fdesc]->vn,&u);
+  res = VOP_WRITE(curproc->file_arr[fdesc]->vn, &u);
+
   if (res) {
 	//DEBUG(DB_FOO, "VOP_WRITE error %x\n", res);
-//	V(file_sem);
+    V(sys_fh->vn_mutex);
     return res;
   }
 
   //DEBUG(DB_FOO, "ret:%d\n", nbytes - u.uio_resid);
   //DEBUG(DB_FOO, "nbytes: %d -- resid: %d\n", nbytes, u.uio_resid);
+
   /* pass back the number of bytes actually written */
-  *retval = nbytes - u.uio_resid;
+  int numWritten = nbytes - u.uio_resid;
+  *retval = numWritten;
   KASSERT(*retval >= 0);
-//  V(file_sem);
-  
+
+  // Also increment the offset by how much we wrote
+  p_fh->offset += numWritten;
+  V(sys_fh->vn_mutex);
+
   return 0;
 }
