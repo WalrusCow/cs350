@@ -18,9 +18,17 @@
 #include <kern/limits.h>
 
 // Global lock for file system calls
-struct semaphore* file_sem = NULL;
+//struct semaphore* file_sem = NULL;
 // Spinlock for initializing the semaphore... lol
-struct spinlock spinner = { .lk_lock = 0, .lk_holder = NULL };
+//struct spinlock spinner = { .lk_lock = 0, .lk_holder = NULL };
+
+//system file handler
+struct sysFH{
+	struct vnode* vn;
+	struct semaphore* vn_mutex;
+};
+
+struct sysFH* sysFH_table[__SYS_OPEN_MAX];
 
 /*
  * handler for open() system call
