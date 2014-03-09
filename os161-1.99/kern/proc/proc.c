@@ -104,6 +104,18 @@ proc_create(const char *name)
 	for (int i = 0; i < __OPEN_MAX; ++i) {
 		proc->file_arr[i] = NULL;
 	}
+
+	// TODO: Allocate a pid
+	proc->pid = 0;
+	// Not done
+	proc->isDone = false;
+	// A potential indicator that this hasn't been changed since allocation
+	proc->exitCode = 0xdeadbeef;
+	proc->codePtr = NULL;
+	// Semaphore used for `waitpid()`
+	proc->parentWait = sem_create("pwSem", 0);
+	proc->parent = NULL;
+
 #else
 #ifdef UW
 	proc->console = NULL;
