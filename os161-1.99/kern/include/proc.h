@@ -45,6 +45,12 @@
 
 #include <kern/limits.h>
 
+//process fild hander
+struct procFH{
+	int offset;
+	int fd;
+};
+
 #endif /* OPT_A2 */
 
 struct addrspace;
@@ -81,7 +87,7 @@ struct proc {
 
 	// Array of file handlers
 	// Note: This contains stdin/stdout/stderr (as 0/1/2)
-	struct vnode* file_arr[__OPEN_MAX];
+	struct procFH* file_arr[__OPEN_MAX];
 
 #else
 #ifdef UW
