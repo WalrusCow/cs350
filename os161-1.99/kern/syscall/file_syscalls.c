@@ -106,7 +106,7 @@ sys_open(char* filename, int flags, int* retval) {
  * TODO: Add docs here
  */
 int
-sys_close(int fd, int *retval) {
+sys_close(int fd) {
 
         spinlock_acquire(&spinner);
         if (file_sem == NULL) {
@@ -134,7 +134,6 @@ sys_close(int fd, int *retval) {
 	V(file_sem);
 
 	//success
-	*retval = 0;
 
 	return 0;
 }
