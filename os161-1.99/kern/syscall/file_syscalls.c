@@ -136,7 +136,16 @@ sys_close(int fd, int *retval) {
  * TODO: Add docs here
  */
 int
-sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes) {
+sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval) {
+
+	spinlock_acquire(&spinner);
+ 	if (file_sem == NULL) {
+ 			// Initialize the semaphore if it's not already... lol
+ 			file_sem = sem_create("file_sem", 1);
+ 	}
+ 	spinlock_release(&spinner);
+
+
   
   struct iovec iov;
   struct uio u;
@@ -144,9 +153,10 @@ sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes) {
 
   DEBUG(DB_SYSCALL,"Syscall: read(%d,%x,%d)\n",fdesc,(unsigned int)ubuf,nbytes);
 
-  if ((fdesc<0) || (fdesc > __OPEN_MAX)||(fdesc==STDOUT_FILENO)||(fdesc==STDERR_FILENO)||(curproc->file_arr[fdesc] == NULL)) {
+  if ((fdesc<0) || (fdesc >= __OPEN_MAX)||(fdesc==STDOUT_FILENO)||(fdesc==STDERR_FILENO)||(curproc->file_arr[fdesc] == NULL)) {
     return EBADF; // make sure it's not std out/err/or anything not belong to this file
   }
+  P(file_sem);
   
   KASSERT(curproc != NULL); // current process
   KASSERT(curproc->file_arr != NULL);
@@ -165,6 +175,12 @@ sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes) {
   u.uio_space = curproc->p_addrspace;
 
   res = VOP_READ(curproc->file_arr[fdesc],&u);
+  if(res){
+	return res;
+  }
+  *retval = nbytes -u.uio_resid;
+  KASSERT(*retval >= 0);
+  V(file_sem);
   
   return res; // error or success;
 
@@ -236,5 +252,6 @@ sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
   *retval = nbytes - u.uio_resid;
   KASSERT(*retval >= 0);
   V(file_sem);
+  
   return 0;
 }
