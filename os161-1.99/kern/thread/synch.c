@@ -41,6 +41,7 @@
 #include <synch.h>
 
 #include "opt-A1.h"
+#include "opt-A2.h"
 
 ////////////////////////////////////////////////////////////
 //
@@ -264,6 +265,107 @@ lock_do_i_hold(struct lock *lock)
 	return true; // dummy until code gets written
 #endif /* OPT_A1 */
 }
+
+////////////////////////////////////////////////////////////
+//
+//  ReadWrite lock
+# if OPT_A2
+struct rwlock *
+rw_create(const char *name)
+{
+	struct rwlock* rwlock;
+	rwlock = kmalloc(sizeof(struct rwlock));
+	if(rwlock == NULL){
+		return NULL;
+	}
+	
+	rwlock -> name = kstrdup(name);
+	if(rwlock -> name == NULL){
+		kfree(rwlock);
+		return NULL;
+	}
+	
+	rwlock -> mutex = sem_create(name,1); // mutex
+	if(rwlock-> mutex == NULL){
+		kfree(rwlock->name);
+		kfree(rwlock);
+		return NULL;
+	}
+	
+	rwlock -> readerl = sem_create(name,1); // mutex
+	if(rwlock-> readerl == NULL){
+		kfree(rwlock->mutex);
+		kfree(rwlock->name);
+		kfree(rwlock);
+		return NULL;
+	}
+	
+	rwlock -> readerc = 0; // no readers initially
+	return rwlock;
+}
+
+void
+rw_wait(struct rwlock* rwlock, RoW READERORWRITER){
+	KASSERT(rwlock);
+	
+	switch (READERORWRITER){
+		case READER:
+			// acquire readerc
+			P(rwlock->readerl);
+			rwlock->readerc ++;
+			if(rwlock -> readerc == 1){
+				P(rwlock->mutex);// no more writers, but readers are ok
+			}
+			V(rwlock->readerl); // release the read lock, other read may enter
+			break;
+		case WRITER:
+			// acquire the mutex
+			P(rwlock -> mutex);
+			break;
+	}
+}
+
+void
+rw_signal(struct rwlock* rwlock,RoW READERORWRITER){
+	KASSERT(rwlock);
+		
+	switch(READERORWRITER){
+		case READER:
+			P(rwlock->readerl);
+			rwlock-> readerc --;
+			if(rwlock->readerc ==0){
+				// release the mutex, no more readers
+				V(rwlock->mutex);
+			}
+			V(rwlock -> readerl);
+			break;
+		case WRITER:
+			V(rwlock-> mutex);
+			break;
+	}
+}
+
+void 
+rw_destroy(struct rwlock* rwlock){
+	
+	KASSERT(rwlock != NULL);
+	KASSERT(rwlock->readerc == 0);
+	
+	sem_destroy(rwlock->mutex);
+	sem_destroy(rwlock->readerl);
+
+	kfree(rwlock->name);
+	kfree(rwlock);
+
+}
+
+# endif
+
+
+
+
+
+
 
 ////////////////////////////////////////////////////////////
 //

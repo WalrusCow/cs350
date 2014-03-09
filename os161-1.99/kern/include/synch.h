@@ -37,6 +37,7 @@
 
 #include <spinlock.h>
 #include "opt-A1.h"
+#include "opt-A2.h"
 
 /*
  * Dijkstra-style semaphore.
@@ -100,6 +101,28 @@ void lock_acquire(struct lock *);
 void lock_release(struct lock *);
 bool lock_do_i_hold(struct lock *);
 
+
+/* rw lock
+*/
+#if OPT_A2
+	typedef enum rw_type{
+		READER = 0,
+		WRITER = 1,
+	}RoW;
+	
+	struct rwlock{
+		char *name;
+		struct semaphore* mutex;
+		struct semaphore* readerl;
+		int readerc;
+	};
+	struct rwlock* rw_create(const char * name);
+	void rw_wait(struct rwlock* rwlock, RoW READERORWRITER);
+	void rw_signal(struct rwlock* rwlock, RoW READERORWRITER);
+	void rw_destroy(struct rwlock*);	
+
+	
+# endif
 /*
  * Condition variable.
  *
