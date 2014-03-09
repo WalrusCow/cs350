@@ -105,10 +105,10 @@ bool lock_do_i_hold(struct lock *);
 /* rw lock
 */
 #if OPT_A2
-	enum rw_type{
-		READER,
-		WRITER,
-	};
+	typedef enum rw_type{
+		READER = 0,
+		WRITER = 1,
+	}RoW;
 	
 	struct rwlock{
 		char *name;
@@ -117,8 +117,8 @@ bool lock_do_i_hold(struct lock *);
 		int readerc;
 	};
 	struct rwlock* rw_create(const char * name);
-	void rw_wait(struct rwlock* rwlock, enum rw_type READERORWRITER);
-	void rw_signal(struct rwlock* rwlock, enum rw_type READERORWRITER);
+	void rw_wait(struct rwlock* rwlock, RoW READERORWRITER);
+	void rw_signal(struct rwlock* rwlock, RoW READERORWRITER);
 	void rw_destroy(struct rwlock*);	
 
 	

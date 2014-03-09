@@ -305,9 +305,8 @@ rw_create(const char *name)
 }
 
 void
-rw_wait(struct rwlock* rwlock, enum rw_type READERORWRITER){
+rw_wait(struct rwlock* rwlock, RoW READERORWRITER){
 	KASSERT(rwlock);
-	KASSERT(READERORWRITER);
 	
 	switch (READERORWRITER){
 		case READER:
@@ -327,10 +326,9 @@ rw_wait(struct rwlock* rwlock, enum rw_type READERORWRITER){
 }
 
 void
-rw_signal(struct rwlock* rwlock,enum rw_type READERORWRITER){
+rw_signal(struct rwlock* rwlock,RoW READERORWRITER){
 	KASSERT(rwlock);
-	KASSERT(READERORWRITER);
-	
+		
 	switch(READERORWRITER){
 		case READER:
 			P(rwlock->readerl);
