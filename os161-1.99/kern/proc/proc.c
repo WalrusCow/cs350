@@ -266,7 +266,7 @@ proc_create_runprogram(const char *name)
 	if (console_path == NULL) {
 	  panic("unable to copy console path name during process creation\n");
 	}
-	if (vfs_open(console_path,O_WRONLY,0,&(proc->file_arr[0]))) {
+	if (vfs_open(console_path,O_WRONLY,0,&(proc->file_arr[0]->vn))) {
 	  panic("unable to open the console during process creation\n");
 	}
 	// Console is all stdin/stdout/stderr

@@ -39,12 +39,12 @@ int
 sys_open(char* filename, int flags, int* retval) {
 	KASSERT(curproc != NULL); // Some process must be opening the file
 
-	spinlock_acquire(&spinner);
-	if (file_sem == NULL) {
+//	spinlock_acquire(&spinner);
+//	if (file_sem == NULL) {
 		// Initialize the semaphore if it's not already... lol
-		file_sem = sem_create("file_sem", 1);
-	}
-	spinlock_release(&spinner);
+//		file_sem = sem_create("file_sem", 1);
+//	}
+//	spinlock_release(&spinner);
 
 	// What we are opening
 	struct vnode* openNode = NULL;
@@ -57,7 +57,7 @@ sys_open(char* filename, int flags, int* retval) {
 	KASSERT(path); // We must be able to copy this
 
 	// Entering critical section
-	P(file_sem);
+//	P(file_sem);
 
 	// Third argument is `mode` and is currently unused
 	int err = vfs_open(path, flags, 0, &openNode);
@@ -65,7 +65,7 @@ sys_open(char* filename, int flags, int* retval) {
 
 	if (err) {
 		// Some error from vfs_open
-		V(file_sem);
+//		V(file_sem);
 		return err;
 	}
 
@@ -75,7 +75,7 @@ sys_open(char* filename, int flags, int* retval) {
 	/* Try to find a file descriptor that is free, but don't bother
 	 * checking the stdin/stdout/stderr numbers (0/1/2) */
 	for (int i = 3; i < __OPEN_MAX; ++i) {
-		struct vnode* curNode = curproc->file_arr[i];
+		struct vnode* curNode = curproc->file_arr[i]->vn;
 		if (curNode == openNode) {
 			// We already have this node then
 			fdesc = i;
@@ -91,12 +91,12 @@ sys_open(char* filename, int flags, int* retval) {
 
 	if (fdesc == -1) {
 		// Process has too many open files - can't find a free fdesc
-		V(file_sem);
+//		V(file_sem);
 		return EMFILE;
 	}
 
-	curproc->file_arr[fdesc] = openNode;
-	V(file_sem);
+	curproc->file_arr[fdesc]->vn = openNode;
+//	V(file_sem);
 	*retval = fdesc;
 	return 0;
 }
@@ -108,12 +108,12 @@ sys_open(char* filename, int flags, int* retval) {
 int
 sys_close(int fd) {
 
-        spinlock_acquire(&spinner);
-        if (file_sem == NULL) {
+//        spinlock_acquire(&spinner);
+//        if (file_sem == NULL) {
                 // Initialize the semaphore if it's not already... lol
-                file_sem = sem_create("file_sem", 1);
-        }
-        spinlock_release(&spinner);
+//                file_sem = sem_create("file_sem", 1);
+//        }
+//        spinlock_release(&spinner);
 
 	//vnode pointer
 	struct vnode* vn;
@@ -122,16 +122,16 @@ sys_close(int fd) {
 	KASSERT(curproc != NULL);
 
 	//acquire the mutex lock
-	P(file_sem);
+//	P(file_sem);
 	//check valid fd
 	if((fd < 3) || (fd >= __OPEN_MAX) || (curproc->file_arr[fd] == NULL)){
 		return EBADF;
 	}
 
-	vn = curproc->file_arr[fd];
+	vn = curproc->file_arr[fd]->vn;
 	vfs_close(vn);
 	curproc->file_arr[fd] = NULL;
-	V(file_sem);
+//	V(file_sem);
 
 	//success
 
@@ -145,12 +145,12 @@ sys_close(int fd) {
 int
 sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval) {
 
-	spinlock_acquire(&spinner);
- 	if (file_sem == NULL) {
+//	spinlock_acquire(&spinner);
+// 	if (file_sem == NULL) {
  			// Initialize the semaphore if it's not already... lol
- 			file_sem = sem_create("file_sem", 1);
- 	}
- 	spinlock_release(&spinner);
+// 			file_sem = sem_create("file_sem", 1);
+// 	}
+// 	spinlock_release(&spinner);
 
 
   
@@ -163,7 +163,7 @@ sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval) {
   if ((fdesc<0) || (fdesc >= __OPEN_MAX)||(fdesc==STDOUT_FILENO)||(fdesc==STDERR_FILENO)||(curproc->file_arr[fdesc] == NULL)) {
     return EBADF; // make sure it's not std out/err/or anything not belong to this file
   }
-  P(file_sem);
+//  P(file_sem);
   
   KASSERT(curproc != NULL); // current process
   KASSERT(curproc->file_arr != NULL);
@@ -181,13 +181,13 @@ sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval) {
   u.uio_rw = UIO_READ; // from kernel to uio_seg
   u.uio_space = curproc->p_addrspace;
 
-  res = VOP_READ(curproc->file_arr[fdesc],&u);
+  res = VOP_READ(curproc->file_arr[fdesc]->vn,&u);
   if(res){
 	return res;
   }
   *retval = nbytes -u.uio_resid;
   KASSERT(*retval >= 0);
-  V(file_sem);
+//  V(file_sem);
   
   return res; // error or success;
 
@@ -210,12 +210,12 @@ int
 sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
 {
 
-	spinlock_acquire(&spinner);
-	if (file_sem == NULL) {
+//	spinlock_acquire(&spinner);
+//	if (file_sem == NULL) {
 			// Initialize the semaphore if it's not already... lol
-			file_sem = sem_create("file_sem", 1);
-	}
-	spinlock_release(&spinner);
+//			file_sem = sem_create("file_sem", 1);
+//	}
+//	spinlock_release(&spinner);
 
   struct iovec iov;
   struct uio u;
@@ -229,7 +229,7 @@ sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
   }
 
   // Acquire lock
-  P(file_sem);
+//  P(file_sem);
 
   KASSERT(curproc != NULL);
   KASSERT(curproc->file_arr != NULL);
@@ -246,10 +246,10 @@ sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
   u.uio_rw = UIO_WRITE;
   u.uio_space = curproc->p_addrspace;
 
-  res = VOP_WRITE(curproc->file_arr[fdesc],&u);
+  res = VOP_WRITE(curproc->file_arr[fdesc]->vn,&u);
   if (res) {
 	//DEBUG(DB_FOO, "VOP_WRITE error %x\n", res);
-	V(file_sem);
+//	V(file_sem);
     return res;
   }
 
@@ -258,7 +258,7 @@ sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
   /* pass back the number of bytes actually written */
   *retval = nbytes - u.uio_resid;
   KASSERT(*retval >= 0);
-  V(file_sem);
+//  V(file_sem);
   
   return 0;
 }

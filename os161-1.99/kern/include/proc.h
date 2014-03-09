@@ -49,6 +49,7 @@
 struct procFH{
 	int offset;
 	int fd;
+	struct vnode* vn;
 };
 
 #endif /* OPT_A2 */
