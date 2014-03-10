@@ -40,9 +40,9 @@ void sys__exit(int exitcode) {
 	//update the fields of the current process
         curproc->exitCode = exitcode;
         curproc->isDone = true;
-	if(curproc->codePtr != NULL){
-		*(curproc->codePtr) = exitcode;
-	}
+//	if(curproc->codePtr != NULL){
+//		*(curproc->codePtr) = exitcode;
+//	}
 
 	//signal the wait
         V(p->parentWait);

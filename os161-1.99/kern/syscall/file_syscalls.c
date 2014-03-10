@@ -25,7 +25,7 @@ struct spinlock spinner = { .lk_lock = 0, .lk_holder = NULL };
 //system file handler
 struct sysFH{
 	struct vnode* vn;
-	struct semaphore* vn_mutex;
+	struct rwlock* vn_mutex;
 };
 
 struct sysFH* sysFH_table[__SYS_OPEN_MAX];

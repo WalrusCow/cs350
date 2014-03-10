@@ -124,11 +124,10 @@ proc_create(const char *name)
 	proc->isDone = false;
 	// A potential indicator that this hasn't been changed since allocation
 	proc->exitCode = 0xdeadbeef;
-	proc->codePtr = NULL;
 	// Semaphore used for `waitpid()`
 	proc->parentWait = sem_create("pwSem", 0);
 	proc->parent = NULL;
-
+	proc->waitlock = rw_create("wait");
 #else
 #ifdef UW
 	proc->console = NULL;
@@ -196,6 +195,9 @@ proc_destroy(struct proc *proc)
 			sys_close(i);
 		}
 	}
+
+	sem_destroy(curproc->parentWait);
+	rw_destroy(curproc->waitlock);
 #else
 
 #ifdef UW
