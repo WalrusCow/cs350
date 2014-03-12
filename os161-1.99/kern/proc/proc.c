@@ -306,6 +306,8 @@ proc_create_runprogram(const char *name)
 		fa[i]->offset = 0;
 		fa[i]->fd = i;
 		fa[i]->vn = fa[0]->vn;
+		// Flag is CAN_READ for stdin; CAN_WRITE for stdout/stderr
+		fa[i]->flags = i ? 2 : 1;
 	}
 
 	kfree(console_path);
