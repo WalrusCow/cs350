@@ -183,7 +183,7 @@ sys_close(int fd) {
 	struct vnode* vn;
 
 	//some process made the system call
-//	KASSERT(curproc != NULL);
+	KASSERT(curproc != NULL);
 
 	// Acquire the mutex lock
 	P(file_sem);
