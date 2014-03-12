@@ -12,10 +12,13 @@
 #include "opt-A2.h"
 
 #if OPT_A2
+int real_rw_flags(int flags);
 
 #include <synch.h>
+#include <copyinout.h>
 #include <spinlock.h>
 #include <kern/limits.h>
+#include <kern/fcntl.h>
 
 // system file handler
 // NOTE: It is better to actually have rw lock in the vnode
@@ -25,10 +28,30 @@ struct sysFH {
 	struct rwlock* rwlock; // readerwriter lock
 };
 
+// Buffer for the file path when opening a file
+// Initialize to all terminators, for paranoia's sake
+char open_name_buffer[__PATH_MAX + 1] = {'\0'};
+
 // Global file descriptors
 struct sysFH* sysFH_table[__SYS_OPEN_MAX];
 // Global lock for file system calls
 struct semaphore* file_sem = NULL;
+
+/* Return 1 for read permissions and 2 for write permissions. 3 if both. */
+#define CAN_READ 1
+#define CAN_WRITE 2 // Macros for convenience
+int
+real_rw_flags(int flags) {
+	switch(flags & O_ACCMODE) {
+		case O_RDONLY:
+			return 1;
+		case O_WRONLY:
+			return 2;
+		case O_RDWR:
+			return 3;
+	}
+	return 0; // Invalid, somehow
+}
 
 /*
  * Allocate things that must be allocated
@@ -55,7 +78,7 @@ file_bootstrap(void) {
  * See kern/fcntl.h for information on flags.
  */
 int
-sys_open(char* filename, int flags, int* retval) {
+sys_open(userptr_t filename, int flags, int* retval) {
 	KASSERT(curproc != NULL); // Some process must be opening the file
 
 	// What we are opening
@@ -65,14 +88,34 @@ sys_open(char* filename, int flags, int* retval) {
 		return EFAULT; // Invalid pointer
 	}
 
-	char* path = kstrdup(filename);
+	// Cannot have both write only and read/write
+	if ((flags & O_WRONLY) && (flags & O_RDWR)) {
+		return EINVAL;
+	}
+	// Not implemented
+	if (flags & O_APPEND) {
+		return EUNIMP;
+	}
+	// O_EXCL not meaningful without O_CREAT - error as a warning to user
+	if ((flags & O_EXCL) && !(flags & O_CREAT)) {
+		return EINVAL;
+	}
+
+	size_t len;
+	int err = copyinstr(filename, open_name_buffer, __PATH_MAX, &len);
+	// Some error when copying the name
+	if (err) {
+		return err;
+	}
+
+	char* path = kstrdup(open_name_buffer);
 	KASSERT(path); // We must be able to copy this
 
 	// Entering critical section
 	P(file_sem);
 
 	// Third argument is `mode` and is currently unused
-	int err = vfs_open(path, flags, 0, &openNode);
+	err = vfs_open(path, flags, 0, &openNode);
 	kfree(path); // Done with path
 
 	if (err) {
@@ -133,6 +176,7 @@ sys_open(char* filename, int flags, int* retval) {
 	new_proc_fh->vn = openNode;
 	new_proc_fh->offset = 0; // Start at 0 always
 	new_proc_fh->fd = fdesc; // Store file descriptor, we need the lock
+	new_proc_fh->flags = real_rw_flags(flags); // Store good flags
 
 	if(update_global) {
 		// Allocate a new reader writer lock for this
@@ -257,6 +301,11 @@ sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval) {
 	  return EBADF;
   }
 
+  if (!(p_fh->flags & CAN_READ)) {
+	  V(file_sem);
+	  return EBADF; // Does not have read permissions
+  }
+
   // System FH for this
   struct sysFH* sys_fh = sysFH_table[p_fh->fd];
 
@@ -331,6 +380,11 @@ sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
   if (p_fh == NULL) {
 	  V(file_sem);
 	  return EBADF;
+  }
+
+  if (!(p_fh->flags & CAN_WRITE)) {
+	  V(file_sem);
+	  return EBADF; // Does not have write permissions
   }
 
   // System FH for this

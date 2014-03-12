@@ -47,6 +47,7 @@
 
 //process fild hander
 struct procFH{
+	int flags;
 	int offset;
 	int fd;
 	struct vnode* vn;
