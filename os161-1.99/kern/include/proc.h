@@ -80,12 +80,11 @@ struct proc {
 	bool isDone; // Check if the process is done yet
 	int exitCode;
 	// A pointer to where to store the exitCode (if a parent is waiting)
+	int* codePtr;
 	// Semaphore used for `waitpid()`
 	struct semaphore* parentWait;
 	// Pointer to the parent process (if any)
 	struct proc* parent;
-
-	struct rwlock* waitlock;
 
 	// Array of file handlers
 	// Note: This contains stdin/stdout/stderr (as 0/1/2)
@@ -144,3 +143,4 @@ struct addrspace *curproc_getas(void);
 struct addrspace *curproc_setas(struct addrspace *);
 
 #endif /* _PROC_H_ */
+
