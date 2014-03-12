@@ -80,12 +80,13 @@ struct proc {
 	bool isDone; // Check if the process is done yet
 	int exitCode;
 	// A pointer to where to store the exitCode (if a parent is waiting)
-	int* codePtr;
+//	int* codePtr;
 	// Semaphore used for `waitpid()`
 	struct semaphore* parentWait;
 	// Pointer to the parent process (if any)
 	struct proc* parent;
 
+	struct rwlock* wait_rw_lock;
 	// Array of file handlers
 	// Note: This contains stdin/stdout/stderr (as 0/1/2)
 	struct procFH* file_arr[__OPEN_MAX];
@@ -110,7 +111,9 @@ struct proc {
 // Note that pidTable[0] == pidTable[1] == NULL, because
 // those PIDs cannot be assigned to a user process
 extern struct proc* pidTable[__PID_MAX + 1];
+extern struct semaphore* pidTableLock;
 
+void setup_pid_table_lock(void);
 #endif /* OPT_A2 */
 
 /* This is the process structure for the kernel and for kernel-only threads. */

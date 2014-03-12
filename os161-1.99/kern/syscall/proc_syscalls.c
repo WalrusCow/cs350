@@ -12,6 +12,8 @@
 
 #if OPT_A2
 
+
+
 #include <synch.h>
 
 #endif /* OPT_A2 */
@@ -115,6 +117,8 @@ sys_waitpid(pid_t pid, int* ret, int options) {
 		return EINVAL; // We don't support any options
 	}
 
+	P(pidTableLock);
+
 	// Check if valid
 	struct proc* p = pidTable[pid];
 	if (p == NULL) {
@@ -125,19 +129,28 @@ sys_waitpid(pid_t pid, int* ret, int options) {
 		return ECHILD; // Can only wait on children
 	}
 
-	// Check if proc already done (then no need to wait)
+	// Check if proc already done (then no need to wait), and release table lock
 	if (p->isDone) {
 		*ret = p->exitCode;
+		V(pidTableLock);
 		return 0;
 	}
 
 	// Tell the child where to store the exit code
-	p->codePtr = ret;
+//	p->codePtr = ret;
+
+	//ensure wait and destroy process are mutual exclusive, can multiple threads wait
+	rw_wait(p->wait_rw_lock, (RoW)0);
+	//no access to pid table, release the lock
+	V(pidTableLock);
 	// Now wait on the child's semaphore
 	P(p->parentWait);
+	*ret = p->exitCode;
 	// Once we have the semaphore, just release it and return
 	// since the return value has already been sent
 	V(p->parentWait);
+	//release the readlock
+	rw_signal(p->wait_rw_lock, (RoW)0);
 	return 0;
 }
 #endif /* OPT_A2 */
