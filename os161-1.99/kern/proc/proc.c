@@ -275,12 +275,35 @@ proc_create_runprogram(const char *name)
 	if (console_path == NULL) {
 	  panic("unable to copy console path name during process creation\n");
 	}
-	if (vfs_open(console_path,O_WRONLY,0,&(proc->file_arr[0]->vn))) {
-	  panic("unable to open the console during process creation\n");
+
+	// Shorthand, because writing proc->file_arr a thousand times sucks
+	struct procFH** fa = proc->file_arr;
+	fa[0] = kmalloc(sizeof(struct procFH));
+	if (fa[0] == NULL) {
+		panic("unable to allocate memory for process file handler\n");
 	}
-	// Console is all stdin/stdout/stderr
-	proc->file_arr[1] = proc->file_arr[0];
-	proc->file_arr[2] = proc->file_arr[0];
+
+	if (vfs_open(console_path, O_WRONLY, 0, &(fa[0]->vn))) {
+		panic("unable to open the console during process creation\n");
+	}
+
+	// The first 3 file handlers are all the same vnode and everything
+	for (int i = 0; i <= 2; ++i) {
+		// Malloc, but not for 0!
+		if (i) fa[i] = kmalloc(sizeof(struct procFH));
+
+		// This is trivially always false for 0, but to avoid having a
+		// nested if-statement, we just check anyway
+		if (fa[i] == NULL) {
+			panic("unable to allocate memory for process file handlers\n");
+		}
+
+		// Initialize the offset, file descriptor number and vnode pointer
+		fa[i]->offset = 0;
+		fa[i]->fd = i;
+		fa[i]->vn = fa[0]->vn;
+	}
+
 	kfree(console_path);
 #else
 
