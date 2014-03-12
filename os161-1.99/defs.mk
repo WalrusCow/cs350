@@ -13,7 +13,7 @@
 # The things that can be set here are documented in mk/os161.config.mk.
 #
 
-OSTREE=/u7/wmcdonald/os161/root
+OSTREE=/u8/s8cai/cs350-git/cs350/os161-1.99/root
 PLATFORM=sys161
 MACHINE=mips
 COMPAT_CFLAGS=

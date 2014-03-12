@@ -17,18 +17,19 @@
 #include <spinlock.h>
 #include <kern/limits.h>
 
-// Global lock for file system calls
-struct semaphore* file_sem = NULL;
+
 // Spinlock for initializing the semaphore... lol
 struct spinlock spinner = { .lk_lock = 0, .lk_holder = NULL };
 
 //system file handler
 struct sysFH{
 	struct vnode* vn;
-	struct semaphore* vn_mutex;
+	struct rwlock* rwlock; // readerwriter lock
 };
 
-struct sysFH* sysFH_table[__SYS_OPEN_MAX];
+struct sysFH* sysFH_table[__SYS_OPEN_MAX]; //global file descriptors
+// Global lock for file system calls
+struct semaphore* file_sem = NULL;
 
 /*
  * handler for open() system call
@@ -71,7 +72,8 @@ sys_open(char* filename, int flags, int* retval) {
 
 	// File descriptor that we will use
 	int fdesc = -1;
-
+	int update_global = 1; // initialize to true
+	
 	/* Try to find a file descriptor that is free, but don't bother
 	 * checking the stdin/stdout/stderr numbers (0/1/2) */
 	for (int i = 3; i < __SYS_OPEN_MAX; ++i) {
@@ -82,6 +84,7 @@ sys_open(char* filename, int flags, int* retval) {
 		else if (sysFH_table[i]->vn == openNode) {
 			// We already have this node then
 			fdesc = i;
+			update_global = 0; // no need new lock
 			break;
 		}
 	}
@@ -99,6 +102,8 @@ sys_open(char* filename, int flags, int* retval) {
 		if (curproc->file_arr[i] == NULL) {
 			// Save index in case
 			if (proc_fdesc == -1) proc_fdesc = i;
+			// use the first empty slot by shun
+			break;
 		}
 	}
 
@@ -118,11 +123,12 @@ sys_open(char* filename, int flags, int* retval) {
 	}
 	new_proc_fh->vn = openNode;
 	new_proc_fh->offset = 0; // Start at 0 always
-	new_proc_fh->fd = fdesc; // Store file descriptor
+	new_proc_fh->fd = fdesc; // Store file descriptor, we need the lock
 
-	// Allocate the new semaphore for this file
-	struct semaphore* new_vnode_sem = sem_create("vnode_sem", 1);
-	if (new_vnode_sem == NULL) {
+	if(update_global){
+	// Allocate a new reader writer lock for this
+	struct rwlock* new_vnode_rw = rw_create("vnode_rw");
+	if (new_vnode_rw == NULL) {
 		// No memory for semaphore
 		V(file_sem);
 		kfree(new_proc_fh);
@@ -135,17 +141,19 @@ sys_open(char* filename, int flags, int* retval) {
 		// No memory for system fh
 		V(file_sem);
 		kfree(new_proc_fh);
-		sem_destroy(new_vnode_sem);
+		rw_destroy(new_vnode_rw);
 		return EMFILE;
 	}
 
 	// Store the ptr to vnode and the lock for this vnode
 	new_sys_fh->vn = openNode;
-	new_sys_fh->vn_mutex = new_vnode_sem;
+	new_sys_fh->rwlock = new_vnode_rw;
 
+	sysFH_table[fdesc] = new_sys_fh;
+	}
 	// Save the results to the process table and the system table
 	curproc->file_arr[proc_fdesc] = new_proc_fh;
-	sysFH_table[fdesc] = new_sys_fh;
+	
 
 	// Release the lock
 	V(file_sem);
@@ -186,6 +194,7 @@ sys_close(int fd) {
 	vn = curproc->file_arr[fd]->vn;
 	vfs_close(vn);
 	curproc->file_arr[fd]->vn = NULL;
+	//free procFH
 
 	int index = curproc->file_arr[fd]->fd;
 
@@ -194,8 +203,8 @@ sys_close(int fd) {
 
 	//check the system file handler, if no process use this, free it
 	if(sysFH_table[index]->vn == NULL){
-		if(sysFH_table[index]->vn_mutex != NULL){
-			sem_destroy(sysFH_table[index]->vn_mutex);
+		if(sysFH_table[index]->rwlock != NULL){
+			rw_destroy(sysFH_table[index]->rwlock);
 		}
 	}
 
@@ -234,7 +243,22 @@ sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval) {
   if ((fdesc<0) || (fdesc >= __OPEN_MAX)||(fdesc==STDOUT_FILENO)||(fdesc==STDERR_FILENO)||(curproc->file_arr[fdesc] == NULL)) {
     return EBADF; // make sure it's not std out/err/or anything not belong to this file
   }
-//  P(file_sem);
+	// Acquire table lock for lookup
+  P(file_sem);
+  struct procFH* p_fh = curproc->file_arr[fdesc]; // local file lookup
+  
+  if (p_fh == NULL) {
+	  return EBADF;
+  }
+
+  // System FH for this
+  struct sysFH* sys_fh = sysFH_table[p_fh->fd];
+
+  // Acquire the lock for this vnode
+  //P(sys_fh->vn_mutex);
+  rw_wait(sys_fh->rwlock,(RoW)0); // 0 is reader
+  
+  V(file_sem);
   
   KASSERT(curproc != NULL); // current process
   KASSERT(curproc->file_arr != NULL);
@@ -246,7 +270,8 @@ sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval) {
   iov.iov_len = nbytes;
   u.uio_iov = &iov;
   u.uio_iovcnt = 1;
-  u.uio_offset = 0;  /* not needed for the console */
+  u.uio_offset = p_fh->offset;  /* not needed for the console */
+  
   u.uio_resid = nbytes; // initialized to total amount of data
   u.uio_segflg = UIO_USERSPACE; // user process data
   u.uio_rw = UIO_READ; // from kernel to uio_seg
@@ -254,11 +279,16 @@ sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval) {
 
   res = VOP_READ(curproc->file_arr[fdesc]->vn,&u);
   if(res){
+	rw_signal(sys_fh->rwlock,(RoW)0); // release the lock
 	return res;
   }
-  *retval = nbytes -u.uio_resid;
+  
+  *retval = nbytes - u.uio_resid;
   KASSERT(*retval >= 0);
 //  V(file_sem);
+
+  p_fh->offset += *retval; // update offset
+  rw_signal(sys_fh->rwlock,(RoW)0);
   
   return res; // error or success;
 
@@ -281,13 +311,14 @@ int
 sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
 {
 
-	spinlock_acquire(&spinner);
+	/*spinlock_acquire(&spinner);
 	if (file_sem == NULL) {
 		// Initialize the semaphore if it's not already... lol
 		file_sem = sem_create("file_sem", 1);
 	}
 	spinlock_release(&spinner);
-
+	*/
+	
   struct iovec iov;
   struct uio u;
   int res;
@@ -310,11 +341,13 @@ sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
   struct sysFH* sys_fh = sysFH_table[p_fh->fd];
 
   // Acquire the lock for this vnode
-  P(sys_fh->vn_mutex);
-
+  //P(sys_fh->vn_mutex);
+  rw_wait(sys_fh->rwlock,(RoW)1);
+  
   V(file_sem);
 
   KASSERT(curproc != NULL);
+  KASSERT(curproc->file_arr != NULL);
   KASSERT(curproc->p_addrspace != NULL);
 
   /* set up a uio structure to refer to the user program's buffer (ubuf) */
@@ -335,7 +368,7 @@ sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
 
   if (res) {
 	//DEBUG(DB_FOO, "VOP_WRITE error %x\n", res);
-    V(sys_fh->vn_mutex);
+    rw_signal(sys_fh->rwlock,(RoW)1);
     return res;
   }
 
@@ -349,7 +382,7 @@ sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
 
   // Also increment the offset by how much we wrote
   p_fh->offset += numWritten;
-  V(sys_fh->vn_mutex);
+  rw_signal(sys_fh->rwlock,(RoW)1);
 
   return 0;
 }
