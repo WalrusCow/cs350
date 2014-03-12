@@ -190,10 +190,14 @@ proc_destroy(struct proc *proc)
 #endif // UW
 
 #if OPT_A2
-	// Close all open files
+	// Close all open files and deallocate the file handlers
+	kfree(proc->file_arr[0]);
+	kfree(proc->file_arr[1]);
 	for (int i = 2; i < __OPEN_MAX; ++i) {
 		if (proc->file_arr[i]) {
-			sys_close(i);
+			vfs_close(proc->file_arr[i]->vn);
+			kfree(proc->file_arr[i]);
+			proc->file_arr[i] = NULL;
 		}
 	}
 #else
