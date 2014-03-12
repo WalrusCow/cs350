@@ -111,9 +111,7 @@ sys_open(char* filename, int flags, int* retval) {
 	// Now check that process has free space
 	for (int i = 3; i < __OPEN_MAX; ++i) {
 		if (curproc->file_arr[i] == NULL) {
-			// Save index in case
-			if (proc_fdesc == -1) proc_fdesc = i;
-			// use the first empty slot by shun
+			proc_fdesc = i;
 			break;
 		}
 	}
@@ -192,6 +190,7 @@ sys_close(int fd) {
 
 	// Check valid fd
 	if((fd < 3) || (fd >= __OPEN_MAX) || (curproc->file_arr[fd] == NULL) || (curproc->file_arr[fd]->vn == NULL)){
+		V(file_sem);
 		return EBADF;
 	}
 
@@ -254,6 +253,7 @@ sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval) {
   struct procFH* p_fh = curproc->file_arr[fdesc]; // local file lookup
 
   if (p_fh == NULL) {
+	  V(file_sem);
 	  return EBADF;
   }
 
@@ -290,7 +290,6 @@ sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval) {
 
   *retval = nbytes - u.uio_resid;
   KASSERT(*retval >= 0);
-//  V(file_sem);
 
   p_fh->offset += *retval; // update offset
   rw_signal(sys_fh->rwlock,(RoW)0);
@@ -319,7 +318,6 @@ sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
   DEBUG(DB_SYSCALL,"Syscall: write(%d,%x,%d)\n",fdesc,(unsigned int)ubuf,nbytes);
 
   if ((fdesc < 0) || (fdesc >= __OPEN_MAX) || (fdesc==STDIN_FILENO)) {
-	  //DEBUG(DB_FOO, "BADF\n");
     return EBADF;
   }
 
@@ -331,6 +329,7 @@ sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
   P(file_sem);
   struct procFH* p_fh = curproc->file_arr[fdesc];
   if (p_fh == NULL) {
+	  V(file_sem);
 	  return EBADF;
   }
 
@@ -338,7 +337,6 @@ sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
   struct sysFH* sys_fh = sysFH_table[p_fh->fd];
 
   // Acquire the lock for this vnode
-  //P(sys_fh->vn_mutex);
   rw_wait(sys_fh->rwlock,(RoW)1);
 
   V(file_sem);
@@ -364,13 +362,9 @@ sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
   res = VOP_WRITE(curproc->file_arr[fdesc]->vn, &u);
 
   if (res) {
-	//DEBUG(DB_FOO, "VOP_WRITE error %x\n", res);
     rw_signal(sys_fh->rwlock,(RoW)1);
     return res;
   }
-
-  //DEBUG(DB_FOO, "ret:%d\n", nbytes - u.uio_resid);
-  //DEBUG(DB_FOO, "nbytes: %d -- resid: %d\n", nbytes, u.uio_resid);
 
   /* pass back the number of bytes actually written */
   int numWritten = nbytes - u.uio_resid;
