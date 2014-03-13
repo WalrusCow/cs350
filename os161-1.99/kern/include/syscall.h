@@ -65,7 +65,10 @@ void sys__exit(int exitcode);
 #endif // UW
 
 #if OPT_A2
-int sys_open(char* filename, int flags, int* retval);
+// Called once during startup to allocate data
+void file_bootstrap(void);
+
+int sys_open(userptr_t filename, int flags, int* retval);
 int sys_close(int fd);
 int sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval);
 

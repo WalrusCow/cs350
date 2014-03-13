@@ -51,6 +51,7 @@
 #include <version.h>
 #include "autoconf.h"  // for pseudoconfig
 
+#include "opt-A2.h"
 
 /*
  * These two pieces of data are maintained by the makefiles and build system.
@@ -108,6 +109,12 @@ boot(void)
 	/* Early initialization. */
 	ram_bootstrap();
 	proc_bootstrap();
+#if OPT_A2
+	file_bootstrap();
+
+	//create gloabl pid table lock
+	setup_pid_table_lock();
+#endif /* OPT_A2 */
 	thread_bootstrap();
 	hardclock_bootstrap();
 	vfs_bootstrap();

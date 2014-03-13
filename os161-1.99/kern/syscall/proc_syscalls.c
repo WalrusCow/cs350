@@ -12,6 +12,7 @@
 
 #if OPT_A2
 #include <vnode.h>
+
 #include <synch.h>
 #include <machine/trapframe.h>
 
@@ -41,9 +42,9 @@ void sys__exit(int exitcode) {
 	//update the fields of the current process
         curproc->exitCode = exitcode;
         curproc->isDone = true;
-	if(curproc->codePtr != NULL){
-		*(curproc->codePtr) = exitcode;
-	}
+//	if(curproc->codePtr != NULL){
+//		*(curproc->codePtr) = exitcode;
+//	}
 
 	//signal the wait
         V(p->parentWait);
@@ -124,17 +125,6 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 	struct trapframe* tf1 = kmalloc(sizeof(struct trapframe));
 	memcpy(tf1,tf,37); // trapframesize
 	
-	// make a new thread
-	void (*entrypoint)(void*,unsigned long);
-	entrypoint = &entry;
-	int result1 = thread_fork("child_p_thread",child,entrypoint,tf1,0); // second argument...
-	
-	if(result1){
-		// need double check as_destroy(addrspace)
-		proc_destroy(child);
-		return result1;
-	}
-
 	// need to increment counters
 	for (int i = 0; i < __OPEN_MAX; ++i) {
 		if(curproc->file_arr[i]!=NULL){
@@ -144,6 +134,17 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 		}else{
 			child->file_arr[i] = NULL;
 		}
+	}
+	
+	// make a new thread
+	void (*entrypoint)(void*,unsigned long);
+	entrypoint = &entry;
+	int result1 = thread_fork("child_p_thread",child,entrypoint,tf1,0); // second argument...
+	
+	if(result1){
+		// need double check as_destroy(addrspace)
+		proc_destroy(child);
+		return result1;
 	}
 	
 	child->parent = curproc;
@@ -163,6 +164,8 @@ sys_waitpid(pid_t pid, int* ret, int options) {
 		return EINVAL; // We don't support any options
 	}
 
+	P(pidTableLock);
+
 	// Check if valid
 	struct proc* p = pidTable[pid];
 	if (p == NULL) {
@@ -173,19 +176,28 @@ sys_waitpid(pid_t pid, int* ret, int options) {
 		return ECHILD; // Can only wait on children
 	}
 
-	// Check if proc already done (then no need to wait)
+	// Check if proc already done (then no need to wait), and release table lock
 	if (p->isDone) {
 		*ret = p->exitCode;
+		V(pidTableLock);
 		return 0;
 	}
 
 	// Tell the child where to store the exit code
-	p->codePtr = ret;
+//	p->codePtr = ret;
+
+	//ensure wait and destroy process are mutual exclusive, can multiple threads wait
+	rw_wait(p->wait_rw_lock, (RoW)0);
+	//no access to pid table, release the lock
+	V(pidTableLock);
 	// Now wait on the child's semaphore
 	P(p->parentWait);
+	*ret = p->exitCode;
 	// Once we have the semaphore, just release it and return
 	// since the return value has already been sent
 	V(p->parentWait);
+	//release the readlock
+	rw_signal(p->wait_rw_lock, (RoW)0);
 	return 0;
 }
 #endif /* OPT_A2 */
