@@ -123,7 +123,7 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 	//parent need the original for return value
 	//copy
 	struct trapframe* tf1 = kmalloc(sizeof(struct trapframe));
-	memcpy(tf1,tf,37); // trapframesize
+	memcpy(tf1,tf,sizeof(struct trapframe)); // trapframesize
 	
 	// need to increment counters
 	for (int i = 0; i < __OPEN_MAX; ++i) {
