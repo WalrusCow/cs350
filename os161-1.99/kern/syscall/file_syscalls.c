@@ -101,9 +101,11 @@ sys_open(char* filename, int flags, int* retval) {
 	for (int i = 3; i < __OPEN_MAX; ++i) {
 		if (curproc->file_arr[i] == NULL) {
 			// Save index in case
-			if (proc_fdesc == -1) proc_fdesc = i;
-			// use the first empty slot by shun
-			break;
+			if (proc_fdesc == -1) {
+				proc_fdesc = i;
+				// use the first empty slot by shun
+				break;
+			}
 		}
 	}
 
