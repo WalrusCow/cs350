@@ -126,7 +126,8 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 	memcpy(tf1,tf,sizeof(struct trapframe)); // trapframesize
 	
 	// need to increment counters
-	for (int i = 0; i < __OPEN_MAX; ++i) {
+	// 0 1 2 are initialized in proc_create
+	for (int i = 3; i < __OPEN_MAX; ++i) {
 		if(curproc->file_arr[i]!=NULL){
 			//full copy
 			memcpy(child->file_arr[i],curproc->file_arr[i],sizeof(struct procFH));
@@ -143,6 +144,7 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 	
 	if(result1){
 		// need double check as_destroy(addrspace)
+		// should clean the file array for us: see proc.c
 		proc_destroy(child);
 		return result1;
 	}
