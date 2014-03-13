@@ -223,7 +223,6 @@ proc_destroy(struct proc *proc)
 	}
 
 	sem_destroy(proc->parentWait);
-	rw_destroy(proc->wait_rw_lock);
 #else
 
 #ifdef UW
@@ -237,7 +236,23 @@ proc_destroy(struct proc *proc)
 	spinlock_cleanup(&proc->p_lock);
 
 	kfree(proc->p_name);
+#if OPT_A2
+	//access pid table, acquire lock
+	P(pidTableLock);
+	//ensure no thread call waitpid
+	rw_wait(proc->wait_rw_lock, (RoW)1);
+	//get the pid
+	int index = (int)(proc->pid);
+	rw_destroy(proc->wait_rw_lock);
+#endif /* OPT-A2 */
+
 	kfree(proc);
+
+#if OPT_A2
+	//set the pid be available
+	pidTable[index] = NULL;
+	V(pidTableLock);
+#endif /* OPT-A2 */
 
 #ifdef UW
 	/* decrement the process count */
@@ -253,7 +268,7 @@ proc_destroy(struct proc *proc)
 	}
 	V(proc_count_mutex);
 #endif // UW
-
+  
 
 }
 
