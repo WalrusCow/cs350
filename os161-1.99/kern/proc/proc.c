@@ -55,11 +55,13 @@
 
 #if OPT_A2
 #include <syscall.h>
+#include <kern/limits.h>
 #endif /* OPT-A2 */
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
  */
+
 struct proc *kproc;
 
 #if OPT_A2
@@ -67,7 +69,25 @@ struct proc *kproc;
 // Table to map PIDs to proc structures
 // Note that pidTable[0] == pidTable[1] == NULL, because
 // those PIDs cannot be assigned to a user process
-struct proc* pidTable[__PID_MAX + 1] = {NULL};
+
+//struct proc* pidTable[__PID_MAX + 1] = {NULL};
+
+//create the gloabl pid table lock
+
+struct semaphore* pidTableLock;
+struct proc* pidTable[__PID_MAX + 1];
+
+void setup_pid_table_lock(void){
+	if(pidTableLock == NULL){
+		pidTableLock = sem_create("pidTableLock", 1);
+	}
+	if(pidTableLock == NULL){
+		panic("unsuccessful create pid table lock\n");
+	}
+	for(int i = 0; i <= __PID_MAX; i++){
+		pidTable[i] = NULL;
+	}
+}
 
 #endif /* OPT_A2 */
 
@@ -124,11 +144,12 @@ proc_create(const char *name)
 	proc->isDone = false;
 	// A potential indicator that this hasn't been changed since allocation
 	proc->exitCode = 0xdeadbeef;
-	proc->codePtr = NULL;
+//	proc->codePtr = NULL;
 	// Semaphore used for `waitpid()`
 	proc->parentWait = sem_create("pwSem", 0);
 	proc->parent = NULL;
 
+	proc->wait_rw_lock = rw_create("waitLock");
 #else
 #ifdef UW
 	proc->console = NULL;
@@ -200,6 +221,9 @@ proc_destroy(struct proc *proc)
 			proc->file_arr[i] = NULL;
 		}
 	}
+
+	sem_destroy(proc->parentWait);
+	rw_destroy(proc->wait_rw_lock);
 #else
 
 #ifdef UW
@@ -451,3 +475,4 @@ curproc_setas(struct addrspace *newas)
 	spinlock_release(&proc->p_lock);
 	return oldas;
 }
+

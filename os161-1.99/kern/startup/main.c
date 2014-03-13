@@ -111,6 +111,9 @@ boot(void)
 	proc_bootstrap();
 #if OPT_A2
 	file_bootstrap();
+
+	//create gloabl pid table lock
+	setup_pid_table_lock();
 #endif /* OPT_A2 */
 	thread_bootstrap();
 	hardclock_bootstrap();

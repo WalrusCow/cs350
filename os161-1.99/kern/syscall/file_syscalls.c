@@ -241,16 +241,36 @@ sys_close(int fd) {
 	/* TODO: Acquire RW lock for the vnode as "W"
 	 * and then continue?  */
 
+	//get the global fd
+	int index = curproc->file_arr[fd]->fd;
+	//get the lock for this vnode
+	rw_wait(sysFH_table[index]->rwlock, (RoW)1);
+
+	//check is it the last process open this file
+	int islast = 0;
+	if(sysFH_table[index]->vn->vn_opencount == 1){
+		islast = 1;
+	}
+
 	// Close the vnode
 	vn = curproc->file_arr[fd]->vn;
 	vfs_close(vn);
 	curproc->file_arr[fd]->vn = NULL;
 
-	int index = curproc->file_arr[fd]->fd;
-
 	// Free procFH
 	kfree(curproc->file_arr[fd]);
 	curproc->file_arr[fd] = NULL;
+
+	//if close the file that only opened by one process
+	if(islast){
+		if(sysFH_table[index]->rwlock != NULL){
+			rw_destroy(sysFH_table[index]->rwlock);
+		}
+
+		sysFH_table[index]->vn = NULL;
+		kfree(sysFH_table[index]);
+		sysFH_table[index] = NULL;
+	}
 
 	// Check the system file handler, if no process use this, free it
 
@@ -261,7 +281,7 @@ sys_close(int fd) {
 	 *
 	 * As such, it is always false for now.
 	 */
-	if (0 && sysFH_table[index]->vn == NULL) {
+/*	if (0 && sysFH_table[index]->vn == NULL) {
 		if (sysFH_table[index]->rwlock != NULL) {
 			rw_destroy(sysFH_table[index]->rwlock);
 		}
@@ -269,7 +289,7 @@ sys_close(int fd) {
 		kfree(sysFH_table[index]);
 		sysFH_table[index] = NULL;
 	}
-
+*/
 	V(file_sem);
 
 	// Success
