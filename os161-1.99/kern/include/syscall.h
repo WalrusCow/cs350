@@ -77,6 +77,8 @@ int sys_fork(pid_t* retval, struct trapframe* tf);
 int sys_waitpid(pid_t pid, int* ret, int options, pid_t* retval);
 int sys_execv(const char *program, char **args);
 
+extern struct semaphore* file_sem;
+
 #endif /* OPT_A2 */
 
 #endif /* _SYSCALL_H_ */
