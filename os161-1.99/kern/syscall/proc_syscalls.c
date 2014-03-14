@@ -15,7 +15,7 @@
 
 #include <synch.h>
 #include <machine/trapframe.h>
-#include <kern/limits.h>
+#include <limits.h>
 #include <copyinout.h>
 #include <test.h>
 void entry(void* data1, unsigned long data2);
@@ -271,7 +271,7 @@ int sys_execv(const char *program, char **args){
 		argv[i] = kmalloc(sizeof(char) * len);
 		result = copyin((const_userptr_t)args[i], argv[i], sizeof(char) * len);
 		if(result) return result;
-		if((arguments_size + len) > __ARGUMENT_SIZE_MAX){
+		if((arguments_size + len) > ARGUMENT_SIZE_MAX){
 			return E2BIG;
 		}
 		arguments_size += len;
