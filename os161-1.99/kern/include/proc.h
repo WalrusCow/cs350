@@ -43,7 +43,7 @@
 
 #if OPT_A2
 
-#include <kern/limits.h>
+#include <limits.h>
 
 //process fild hander
 struct procFH{
@@ -88,7 +88,7 @@ struct proc {
 	struct rwlock* wait_rw_lock;
 	// Array of file handlers
 	// Note: This contains stdin/stdout/stderr (as 0/1/2)
-	struct procFH* file_arr[__OPEN_MAX];
+	struct procFH* file_arr[OPEN_MAX];
 
 #else
 #ifdef UW
@@ -109,7 +109,7 @@ struct proc {
 // Table to map PIDs to proc structures
 // Note that pidTable[0] == pidTable[1] == NULL, because
 // those PIDs cannot be assigned to a user process
-extern struct proc* pidTable[__PID_MAX + 1];
+extern struct proc* pidTable[PID_MAX + 1];
 extern struct semaphore* pidTableLock;
 #endif /* OPT_A2 */
 
