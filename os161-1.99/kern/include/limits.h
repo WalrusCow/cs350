@@ -49,5 +49,6 @@
 #define OPEN_MAX        __OPEN_MAX
 #define SYS_OPEN_MAX	__SYS_OPEN_MAX
 #define IOV_MAX         __IOV_MAX
+#define ARGUMENT_SIZE_MAX __ARGUMENT_SIZE_MAX
 
 #endif /* _LIMITS_H_ */
