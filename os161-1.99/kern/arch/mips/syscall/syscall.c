@@ -139,7 +139,16 @@ syscall(struct trapframe *tf)
 	  // Call actual open function
 	  err = sys_open((userptr_t)tf->tf_a0, (int)tf->tf_a1, (int*)(&retval));
 	  break;
-
+	case SYS_fork:
+	  err = sys_fork((pid_t*)(&retval),tf);
+	  break;
+	case SYS_getpid:
+	  err = sys_getpid((pid_t*) (&retval));
+	  break;
+	case SYS_waitpid:
+	  err = sys_waitpid((pid_t) tf->tf_a0, (int*) (&retval), (int) tf->tf_a2);
+	  break;
+	  
 	case SYS_close:
                 err = sys_close((int)tf->tf_a0);
                 break;
@@ -193,5 +202,10 @@ syscall(struct trapframe *tf)
 void
 enter_forked_process(struct trapframe *tf)
 {
-	(void)tf;
+#if OPT_A2
+	// going to user mode, can not use kernal whatever is kmalloc
+	struct trapframe tfOnStack;
+	memcpy(&tfOnStack,tf,sizeof(struct trapframe));
+	mips_usermode(&tfOnStack);
+#endif
 }

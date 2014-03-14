@@ -11,10 +11,10 @@
 #include "opt-A2.h"
 
 #if OPT_A2
-
-
+#include <vnode.h>
 
 #include <synch.h>
+#include <machine/trapframe.h>
 
 #endif /* OPT_A2 */
 
@@ -83,23 +83,72 @@ sys_getpid(pid_t* retval) {
 	return 0;
 }
 
+void 
+entry(void* data1, unsigned long data2){
+	// 1st function in called in child process
+	// manipulate trapframe,
+	// next instruction, see syscall.c
+	(void)data2;
+	struct trapframe* tf = (struct trapframe*) data1;
+	tf->tf_epc += 4;
+	tf->tf_v0 = 0; //return pid = 0
+	tf->tf_a3 = 1; // no error
+	enter_forked_process(tf);
+}
+
 int
-sys_fork(pid_t* retval) {
+sys_fork(pid_t* retval,struct trapframe *tf) {
 	// TODO: THIS IS NOT CORRECT: child must not start until
 	// this function is done.  maybe we need to copy out
 	// a subset of this function
 	struct proc* child = proc_create_runprogram(curproc->p_name);
-
+	// copy the process, has zero thread, 1 thread can not belong to 1+ process
+	// need to create main thread....
+	
 	if (child == NULL) {
 		*retval = 0;
-		return -1;
+		return ENOMEM;
+		// ENPROC	There are already too many processes on the system.
+		// ENOMEM	Sufficient virtual memory for the new process was not available.
 	}
-
-	// Copy open files (by reference)
-	for (int i = 0; i < __OPEN_MAX; ++i) {
-		child->file_arr[i] = curproc->file_arr[i];
+	
+	// copy address space
+	int result = as_copy(curproc->p_addrspace,&(child->p_addrspace));
+	if(result){
+		// fail to copy address space
+		proc_destroy(child);
+		return result;
 	}
-
+	//make a copy of tf in kernal space kmalloc
+	//parent need the original for return value
+	//copy
+	struct trapframe* tf1 = kmalloc(sizeof(struct trapframe));
+	memcpy(tf1,tf,sizeof(struct trapframe)); // trapframesize
+	
+	// need to increment counters
+	// 0 1 2 are initialized in proc_create
+	for (int i = 3; i < __OPEN_MAX; ++i) {
+		if(curproc->file_arr[i]!=NULL){
+			//full copy
+			memcpy(child->file_arr[i],curproc->file_arr[i],sizeof(struct procFH));
+			VOP_INCREF(child->file_arr[i]->vn);
+		}else{
+			child->file_arr[i] = NULL;
+		}
+	}
+	
+	// make a new thread
+	void (*entrypoint)(void*,unsigned long);
+	entrypoint = &entry;
+	int result1 = thread_fork("child_p_thread",child,entrypoint,tf1,0); // second argument...
+	
+	if(result1){
+		// need double check as_destroy(addrspace)
+		// should clean the file array for us: see proc.c
+		proc_destroy(child);
+		return result1;
+	}
+	
 	child->parent = curproc;
 	*retval = child->pid; // TODO: Different ret val for parent & child
 	return 0;
