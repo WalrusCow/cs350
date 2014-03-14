@@ -15,6 +15,9 @@
 
 #include <synch.h>
 #include <machine/trapframe.h>
+#include <kern/limits.h>
+#include <copyinout.h>
+#include <test.h>
 void entry(void* data1, unsigned long data2);
 
 #endif /* OPT_A2 */
@@ -154,7 +157,7 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 }
 
 int
-sys_waitpid(pid_t pid, int* ret, int options) {
+sys_waitpid(pid_t pid, int* ret, int options, pid_t* retval) {
 	if (ret == NULL) {
 		return EFAULT; // Invalid pointer
 	}
@@ -199,6 +202,75 @@ sys_waitpid(pid_t pid, int* ret, int options) {
 	V(p->parentWait);
 	//release the readlock
 	rw_signal(p->wait_rw_lock, (RoW)0);
+
+	//return
+	*retval = pid;
 	return 0;
 }
+
+int sys_execv(const char *program, char **args){
+	int result;
+
+	//no invalid pointer
+	if(program == NULL || args == NULL){
+		return EFAULT;
+	}
+
+	//program name
+	char progname[128];
+	for(int i = 0; i < 128; i++){
+		progname[i] = '\0';
+	}
+
+	result = copyin((const_userptr_t)program, progname, sizeof(char) * (strlen(program) + 1));
+	//fail
+	if(result){
+		return result;
+	}
+	//no program name
+	if(strlen(progname) == 0){
+		return ENOEXEC;
+	}
+	//the size of progname is too long
+	if(progname[127] != '\0'){
+		return ENOEXEC;
+	}
+
+	//intial argv
+	unsigned long nargs = 0;
+	char** argv;
+	//check the total size of argument strings
+	int arguments_size = 0;
+
+	//find the nargs
+	while(args[nargs] != NULL){
+		nargs += 1;
+	}
+
+	//malloc size of argv
+	argv = kmalloc(sizeof(char*) *  (nargs + 1));
+
+	for(unsigned long i = 0; i < nargs; i++){
+		int len = strlen(args[i]) + 1;
+		argv[i] = kmalloc(sizeof(char) * len);
+		result = copyin((const_userptr_t)args[i], argv[i], sizeof(char) * len);
+		if(result) return result;
+		if((arguments_size + len) > __ARGUMENT_SIZE_MAX){
+			return E2BIG;
+		}
+		arguments_size += len;
+	}
+
+	as_destroy(curproc->p_addrspace);
+	curproc->p_addrspace = NULL;
+
+	//execute the program
+	result = runprogram(progname, nargs, argv);
+	if(result) return result;
+
+	//success
+	return 0;
+}
+
 #endif /* OPT_A2 */
+

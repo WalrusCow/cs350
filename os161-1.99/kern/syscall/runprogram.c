@@ -116,7 +116,8 @@ runprogram(char *progname)
                 stackptr -= stackptr % 4;
                 stackptr -= sizeof(char) * (strlen(args[i]) + 1);
                 argv[i] = (userptr_t)stackptr;
-                copyout(args[i], argv[i], sizeof(char) * (strlen(args[i]) + 1));
+		int result = copyout(args[i], argv[i], sizeof(char) * (strlen(args[i]) + 1));
+		if(result) return result;
         }
 
         argv[argc] = NULL;

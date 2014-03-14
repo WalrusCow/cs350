@@ -74,7 +74,8 @@ int sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval);
 
 int sys_getpid(pid_t* retval);
 int sys_fork(pid_t* retval, struct trapframe* tf);
-int sys_waitpid(pid_t pid, int* ret, int options);
+int sys_waitpid(pid_t pid, int* ret, int options, pid_t* retval);
+int sys_execv(const char *program, char **args);
 
 #endif /* OPT_A2 */
 
