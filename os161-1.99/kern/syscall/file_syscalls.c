@@ -65,11 +65,17 @@ file_bootstrap(void) {
 			panic("unable to allocate system file table\n");
 		}
 		sysFH_table[i]->rwlock = rw_create("console lock");
+		if (sysFH_table[i]->rwlock == NULL) {
+			panic("unable to allocate console lock\n");
+		}
 		sysFH_table[i]->vn = NULL;
 	}
 
 	// Initialize global table lock
 	file_sem = sem_create("file_sem", 1);
+	if (file_sem == NULL) {
+		panic("unable to allocate global file table lock\n");
+	}
 }
 
 /*

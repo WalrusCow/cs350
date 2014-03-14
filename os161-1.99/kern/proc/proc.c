@@ -66,11 +66,15 @@ struct proc *kproc;
 
 #if OPT_A2
 
+pid_t inc_pid(pid_t pid);
+
 // Table to map PIDs to proc structures
 // Note that the first two entries are always NULL (invalid user pids)
 struct proc* pidTable[PID_MAX + 1] = {NULL};
 // Lock for the table
 struct semaphore* pidTableLock = NULL;
+// Last PID allocated
+volatile int last_pid = PID_MIN - 1;
 
 #endif /* OPT_A2 */
 
@@ -86,6 +90,21 @@ static struct semaphore *proc_count_mutex;
 /* used to signal the kernel menu thread when there are no processes */
 struct semaphore *no_proc_sem;
 #endif  // UW
+
+#if OPT_A2
+/*
+ * Increment a pid, modulo PID_MAX.
+ * This function always returns a value `p` with PID_MIN <= p <= PID_MAX
+ */
+pid_t
+inc_pid(pid_t pid) {
+	pid += 1;
+	if (pid > PID_MAX) {
+		pid = PID_MIN;
+	}
+	return pid;
+}
+#endif /* OPT_A2 */
 
 /*
  * Create a proc structure.
@@ -131,9 +150,18 @@ proc_create(const char *name)
 	proc->exitCode = 0xdeadbeef;
 	// Semaphore used for `waitpid()`
 	proc->parentWait = sem_create("pwSem", 0);
+	if (proc->parentWait == NULL) {
+		kfree(proc);
+		return NULL;
+	}
 	proc->parent = NULL;
 
 	proc->wait_rw_lock = rw_create("waitLock");
+	if (proc->wait_rw_lock == NULL) {
+		sem_destroy(proc->parentWait);
+		kfree(proc);
+		return NULL;
+	}
 #else
 #ifdef UW
 	proc->console = NULL;
@@ -315,10 +343,13 @@ proc_create_runprogram(const char *name)
 
 	P(pidTableLock);
 	// Allocate a pid for the process
-	for(pid_t i = PID_MIN; i <= PID_MAX; i++){
-		if (pidTable[i] == NULL) {
-			pidTable[i] = proc;
-			proc->pid = i;
+	for(pid_t n = inc_pid(last_pid); n != last_pid; n = inc_pid(n)) {
+		if (pidTable[n] == NULL) {
+			// Set pid and table entry
+			pidTable[n] = proc;
+			proc->pid = n;
+			// Last pid allocated
+			last_pid = n;
 			break;
 		}
 	}
