@@ -136,6 +136,7 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 		if(curproc->file_arr[i]!=NULL){
 			//full copy
 			memcpy(child->file_arr[i],curproc->file_arr[i],sizeof(struct procFH));
+			// TODO: Add refcount to sysFH table & w.e
 			VOP_INCREF(child->file_arr[i]->vn);
 		}else{
 			child->file_arr[i] = NULL;
@@ -174,10 +175,12 @@ sys_waitpid(pid_t pid, int* ret, int options, pid_t* retval) {
 	// Check if valid
 	struct proc* p = pidTable[pid];
 	if (p == NULL) {
+		V(pidTableLock);
 		return ESRCH; // No process
 	}
 
 	if (p->parent != curproc) {
+		V(pidTableLock);
 		return ECHILD; // Can only wait on children
 	}
 
