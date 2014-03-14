@@ -127,29 +127,44 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 	//make a copy of tf in kernal space kmalloc
 	//parent need the original for return value
 	//copy
-	struct trapframe* tf1 = kmalloc(sizeof(struct trapframe));
-	memcpy(tf1,tf,sizeof(struct trapframe)); // trapframesize
 
+	struct trapframe* new_tf = kmalloc(sizeof(struct trapframe));
+	if(new_tf == NULL){
+		proc_destroy(child);
+		return ENOMEM;
+	}
+	memcpy(new_tf,tf,sizeof(struct trapframe)); // trapframesize
+	
 	// need to increment counters
 	// 0 1 2 are initialized in proc_create
+	// same process may not change file_arr using different thread, inconsistency
+	// acquire the global lock
+	
+	
 	for (int i = 3; i < __OPEN_MAX; ++i) {
 		if(curproc->file_arr[i]!=NULL){
 			//full copy
+			child->file_arr[i] = kmalloc(sizeof(struct procFH));
+			if(child->file_arr[i] == NULL){
+				kfree(new_tf);
+				proc_destroy(child);
+				return ENOMEM;
+			}
 			memcpy(child->file_arr[i],curproc->file_arr[i],sizeof(struct procFH));
 			VOP_INCREF(child->file_arr[i]->vn);
-		}else{
-			child->file_arr[i] = NULL;
 		}
-	}
-
+	} 
+	
+	
 	// make a new thread
-	int result1 = thread_fork("child_p_thread",child,&entry,tf1,0); // second argument...
-
-	if(result1){
+	result = thread_fork("child_p_thread",child,&entry,new_tf,0); // second argument...
+	
+	if(result){
+		// free new_tf?
 		// need double check as_destroy(addrspace)
 		// should clean the file array for us: see proc.c
 		proc_destroy(child);
-		return result1;
+		return result;
 	}
 
 	child->parent = curproc;
