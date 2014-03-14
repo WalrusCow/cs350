@@ -55,7 +55,7 @@
 
 #if OPT_A2
 #include <syscall.h>
-#include <kern/limits.h>
+#include <limits.h>
 #endif /* OPT-A2 */
 
 /*
@@ -67,27 +67,10 @@ struct proc *kproc;
 #if OPT_A2
 
 // Table to map PIDs to proc structures
-// Note that pidTable[0] == pidTable[1] == NULL, because
-// those PIDs cannot be assigned to a user process
-
-//struct proc* pidTable[__PID_MAX + 1] = {NULL};
-
-//create the gloabl pid table lock
-
-struct semaphore* pidTableLock;
-struct proc* pidTable[__PID_MAX + 1];
-
-void setup_pid_table_lock(void){
-	if(pidTableLock == NULL){
-		pidTableLock = sem_create("pidTableLock", 1);
-	}
-	if(pidTableLock == NULL){
-		panic("unsuccessful create pid table lock\n");
-	}
-	for(int i = 0; i <= __PID_MAX; i++){
-		pidTable[i] = NULL;
-	}
-}
+// Note that the first two entries are always NULL (invalid user pids)
+struct proc* pidTable[PID_MAX + 1] = {NULL};
+// Lock for the table
+struct semaphore* pidTableLock = NULL;
 
 #endif /* OPT_A2 */
 
@@ -134,17 +117,18 @@ proc_create(const char *name)
 
 #if OPT_A2
 	// Initialize array to NULL pointers
-	for (int i = 0; i < __OPEN_MAX; ++i) {
+	for (int i = 0; i < OPEN_MAX; ++i) {
 		proc->file_arr[i] = NULL;
 	}
 
-	// TODO: Allocate a pid
+	// Set pid to 0 initially (for kproc - user processes will have this
+	// overridden in creat_proc_runprogram)
 	proc->pid = 0;
+
 	// Not done
 	proc->isDone = false;
 	// A potential indicator that this hasn't been changed since allocation
 	proc->exitCode = 0xdeadbeef;
-//	proc->codePtr = NULL;
 	// Semaphore used for `waitpid()`
 	proc->parentWait = sem_create("pwSem", 0);
 	proc->parent = NULL;
@@ -214,7 +198,7 @@ proc_destroy(struct proc *proc)
 	// Close all open files and deallocate the file handlers
 	kfree(proc->file_arr[0]);
 	kfree(proc->file_arr[1]);
-	for (int i = 2; i < __OPEN_MAX; ++i) {
+	for (int i = 2; i < OPEN_MAX; ++i) {
 		if (proc->file_arr[i]) {
 			vfs_close(proc->file_arr[i]->vn);
 			kfree(proc->file_arr[i]);
@@ -237,22 +221,22 @@ proc_destroy(struct proc *proc)
 
 	kfree(proc->p_name);
 #if OPT_A2
-	//access pid table, acquire lock
+	// access pid table, acquire lock
 	P(pidTableLock);
-	//ensure no thread call waitpid
+	// ensure no thread call waitpid
 	rw_wait(proc->wait_rw_lock, (RoW)1);
-	//get the pid
+	// get the pid
 	int index = (int)(proc->pid);
 	rw_destroy(proc->wait_rw_lock);
-#endif /* OPT-A2 */
 
-	kfree(proc);
-
-#if OPT_A2
-	//set the pid be available
+	// set the pid be available
+	// Note that the table is just an array of proc pointers, so we
+	// should not free the memory (it is freed right above this)
 	pidTable[index] = NULL;
 	V(pidTableLock);
 #endif /* OPT-A2 */
+
+	kfree(proc);
 
 #ifdef UW
 	/* decrement the process count */
@@ -278,6 +262,14 @@ proc_destroy(struct proc *proc)
 void
 proc_bootstrap(void)
 {
+#if OPT_A2
+	// Set up the pid table lock
+	pidTableLock = sem_create("pidTableLock", 1);
+	if (pidTableLock == NULL){
+		panic("unsuccessful create pid table lock\n");
+	}
+#endif /* OPT_A2 */
+
   kproc = proc_create("[kernel]");
   if (kproc == NULL) {
     panic("proc_create for kproc failed\n");
@@ -300,6 +292,11 @@ proc_bootstrap(void)
  *
  * It will have no address space and will inherit the current
  * process's (that is, the kernel menu's) current directory.
+ *
+ * NOTE: The structure will have a pid of -1 if there were no pids
+ * available.
+ * TODO: Probably change this to have an error code return, or take
+ * a proc** as argument and set that (and return error code).
  */
 struct proc *
 proc_create_runprogram(const char *name)
@@ -313,6 +310,20 @@ proc_create_runprogram(const char *name)
 	}
 
 #if OPT_A2
+	// Set to -1 in case we don't find a free pid
+	proc->pid = -1;
+
+	P(pidTableLock);
+	// Allocate a pid for the process
+	for(pid_t i = PID_MIN; i <= PID_MAX; i++){
+		if (pidTable[i] == NULL) {
+			pidTable[i] = proc;
+			proc->pid = i;
+			break;
+		}
+	}
+	V(pidTableLock);
+
 	/* open the console - this should always succeed */
 	console_path = kstrdup("con:");
 	if (console_path == NULL) {

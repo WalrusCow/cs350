@@ -80,8 +80,6 @@ struct proc {
 	pid_t pid; // ID of the process
 	bool isDone; // Check if the process is done yet
 	int exitCode;
-	// A pointer to where to store the exitCode (if a parent is waiting)
-//	int* codePtr;
 	// Semaphore used for `waitpid()`
 	struct semaphore* parentWait;
 	// Pointer to the parent process (if any)
@@ -113,8 +111,6 @@ struct proc {
 // those PIDs cannot be assigned to a user process
 extern struct proc* pidTable[__PID_MAX + 1];
 extern struct semaphore* pidTableLock;
-
-void setup_pid_table_lock(void);
 #endif /* OPT_A2 */
 
 /* This is the process structure for the kernel and for kernel-only threads. */
