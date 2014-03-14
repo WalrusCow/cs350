@@ -47,6 +47,7 @@
 #define NGROUPS_MAX     __NGROUPS_MAX
 #define LOGIN_NAME_MAX  __LOGIN_NAME_MAX
 #define OPEN_MAX        __OPEN_MAX
+#define SYS_OPEN_MAX	__SYS_OPEN_MAX
 #define IOV_MAX         __IOV_MAX
 
 #endif /* _LIMITS_H_ */

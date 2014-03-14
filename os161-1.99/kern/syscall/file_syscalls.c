@@ -17,7 +17,7 @@ int real_rw_flags(int flags);
 #include <synch.h>
 #include <copyinout.h>
 #include <spinlock.h>
-#include <kern/limits.h>
+#include <limits.h>
 #include <kern/fcntl.h>
 
 // system file handler
@@ -30,10 +30,10 @@ struct sysFH {
 
 // Buffer for the file path when opening a file
 // Initialize to all terminators, for paranoia's sake
-char open_name_buffer[__PATH_MAX + 1] = {'\0'};
+char open_name_buffer[PATH_MAX + 1] = {'\0'};
 
 // Global file descriptors
-struct sysFH* sysFH_table[__SYS_OPEN_MAX];
+struct sysFH* sysFH_table[SYS_OPEN_MAX];
 // Global lock for file system calls
 struct semaphore* file_sem = NULL;
 
@@ -108,7 +108,7 @@ sys_open(userptr_t filename, int flags, int* retval) {
 	}
 
 	size_t len;
-	int err = copyinstr(filename, open_name_buffer, __PATH_MAX, &len);
+	int err = copyinstr(filename, open_name_buffer, PATH_MAX, &len);
 	// Some error when copying the name
 	if (err) {
 		return err;
@@ -136,7 +136,7 @@ sys_open(userptr_t filename, int flags, int* retval) {
 
 	/* Try to find a file descriptor that is free, but don't bother
 	 * checking the stdin/stdout/stderr numbers (0/1/2) */
-	for (int i = 3; i < __SYS_OPEN_MAX; ++i) {
+	for (int i = 3; i < SYS_OPEN_MAX; ++i) {
 		if (sysFH_table[i] == NULL) {
 			// Save first open fdesc if none yet
 			if (fdesc == -1) fdesc = i;
@@ -158,7 +158,7 @@ sys_open(userptr_t filename, int flags, int* retval) {
 
 	int proc_fdesc = -1;
 	// Now check that process has free space
-	for (int i = 3; i < __OPEN_MAX; ++i) {
+	for (int i = 3; i < OPEN_MAX; ++i) {
 		if (curproc->file_arr[i] == NULL) {
 			proc_fdesc = i;
 			break;
@@ -239,7 +239,7 @@ sys_close(int fd) {
 	P(file_sem);
 
 	// Check valid fd
-	if((fd < 3) || (fd >= __OPEN_MAX) || (curproc->file_arr[fd] == NULL) || (curproc->file_arr[fd]->vn == NULL)){
+	if((fd < 3) || (fd >= OPEN_MAX) || (curproc->file_arr[fd] == NULL) || (curproc->file_arr[fd]->vn == NULL)){
 		V(file_sem);
 		return EBADF;
 	}
@@ -315,7 +315,7 @@ sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval) {
 
   DEBUG(DB_SYSCALL,"Syscall: read(%d,%x,%d)\n",fdesc,(unsigned int)ubuf,nbytes);
 
-  if ((fdesc<0) || (fdesc >= __OPEN_MAX)||(fdesc==STDOUT_FILENO)||(fdesc==STDERR_FILENO)||(curproc->file_arr[fdesc] == NULL)) {
+  if ((fdesc<0) || (fdesc >= OPEN_MAX)||(fdesc==STDOUT_FILENO)||(fdesc==STDERR_FILENO)||(curproc->file_arr[fdesc] == NULL)) {
     return EBADF; // make sure it's not std out/err/or anything not belong to this file
   }
 	// Acquire table lock for lookup
@@ -392,7 +392,7 @@ sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
 
   DEBUG(DB_SYSCALL,"Syscall: write(%d,%x,%d)\n",fdesc,(unsigned int)ubuf,nbytes);
 
-  if ((fdesc < 0) || (fdesc >= __OPEN_MAX) || (fdesc==STDIN_FILENO)) {
+  if ((fdesc < 0) || (fdesc >= OPEN_MAX) || (fdesc==STDIN_FILENO)) {
     return EBADF;
   }
 
