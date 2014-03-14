@@ -99,5 +99,8 @@
 /* Max number of iovec structures at once for readv/writev/preadv/pwritev */
 #define __IOV_MAX       1024
 
+/* the maximum total size of the argument strings*/
+#define __ARGUMENT_SIZE_MAX    1024
+
 
 #endif /* _KERN_LIMITS_H_ */
