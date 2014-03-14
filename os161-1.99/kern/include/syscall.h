@@ -73,7 +73,6 @@ int sys_close(int fd);
 int sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval);
 
 int sys_getpid(pid_t* retval);
-void entry(void* data1, unsigned long data2);
 int sys_fork(pid_t* retval, struct trapframe* tf);
 int sys_waitpid(pid_t pid, int* ret, int options, pid_t* retval);
 int sys_execv(const char *program, char **args);

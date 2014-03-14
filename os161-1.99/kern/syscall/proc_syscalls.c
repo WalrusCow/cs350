@@ -18,6 +18,7 @@
 #include <kern/limits.h>
 #include <copyinout.h>
 #include <test.h>
+void entry(void* data1, unsigned long data2);
 
 #endif /* OPT_A2 */
 
@@ -138,12 +139,10 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 		}else{
 			child->file_arr[i] = NULL;
 		}
-	}
+	} 
 	
 	// make a new thread
-	void (*entrypoint)(void*,unsigned long);
-	entrypoint = &entry;
-	int result1 = thread_fork("child_p_thread",child,entrypoint,tf1,0); // second argument...
+	int result1 = thread_fork("child_p_thread",child,&entry,tf1,0); // second argument...
 	
 	if(result1){
 		// need double check as_destroy(addrspace)
