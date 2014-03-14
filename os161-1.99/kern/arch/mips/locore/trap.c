@@ -40,6 +40,7 @@
 #include <mainbus.h>
 #include <syscall.h>
 
+#include "opt-A2.h"
 
 /* in exception.S */
 extern void asm_usermode(struct trapframe *tf);
@@ -114,7 +115,12 @@ kill_curthread(vaddr_t epc, unsigned code, vaddr_t vaddr)
 
 	kprintf("Fatal user mode trap %u sig %d (%s, epc 0x%x, vaddr 0x%x)\n",
 		code, sig, trapcodenames[code], epc, vaddr);
+
+#if OPT_A2
+	sys__exit(sig);
+#else
 	panic("I don't know how to handle this\n");
+#endif /* OPT_A2 */
 }
 
 /*
