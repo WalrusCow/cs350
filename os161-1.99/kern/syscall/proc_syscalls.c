@@ -87,7 +87,7 @@ sys_getpid(pid_t* retval) {
 	return 0;
 }
 
-void 
+void
 entry(void* data1, unsigned long data2){
 	// 1st function in called in child process
 	// manipulate trapframe,
@@ -102,20 +102,21 @@ entry(void* data1, unsigned long data2){
 
 int
 sys_fork(pid_t* retval,struct trapframe *tf) {
-	// TODO: THIS IS NOT CORRECT: child must not start until
-	// this function is done.  maybe we need to copy out
-	// a subset of this function
 	struct proc* child = proc_create_runprogram(curproc->p_name);
 	// copy the process, has zero thread, 1 thread can not belong to 1+ process
 	// need to create main thread....
-	
+
 	if (child == NULL) {
+		// Not enough memory
 		*retval = 0;
 		return ENOMEM;
-		// ENPROC	There are already too many processes on the system.
-		// ENOMEM	Sufficient virtual memory for the new process was not available.
 	}
-	
+	else if (child->pid == -1) {
+		// No pid was available - too many processes
+		proc_destroy(child);
+		return ENPROC;
+	}
+
 	// copy address space
 	int result = as_copy(curproc->p_addrspace,&(child->p_addrspace));
 	if(result){
@@ -128,7 +129,7 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 	//copy
 	struct trapframe* tf1 = kmalloc(sizeof(struct trapframe));
 	memcpy(tf1,tf,sizeof(struct trapframe)); // trapframesize
-	
+
 	// need to increment counters
 	// 0 1 2 are initialized in proc_create
 	for (int i = 3; i < __OPEN_MAX; ++i) {
@@ -139,18 +140,18 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 		}else{
 			child->file_arr[i] = NULL;
 		}
-	} 
-	
+	}
+
 	// make a new thread
 	int result1 = thread_fork("child_p_thread",child,&entry,tf1,0); // second argument...
-	
+
 	if(result1){
 		// need double check as_destroy(addrspace)
 		// should clean the file array for us: see proc.c
 		proc_destroy(child);
 		return result1;
 	}
-	
+
 	child->parent = curproc;
 	*retval = child->pid; // TODO: Different ret val for parent & child
 	return 0;
@@ -186,9 +187,6 @@ sys_waitpid(pid_t pid, int* ret, int options, pid_t* retval) {
 		V(pidTableLock);
 		return 0;
 	}
-
-	// Tell the child where to store the exit code
-//	p->codePtr = ret;
 
 	//ensure wait and destroy process are mutual exclusive, can multiple threads wait
 	rw_wait(p->wait_rw_lock, (RoW)0);
