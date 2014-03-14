@@ -12,12 +12,15 @@
 
 #if OPT_A2
 #include <vnode.h>
-
+#include <clock.h>
 #include <synch.h>
 #include <machine/trapframe.h>
 #include <limits.h>
 #include <copyinout.h>
 #include <test.h>
+
+#define PROC_DESTROY_TIME 2
+
 void entry(void* data1, unsigned long data2);
 
 #endif /* OPT_A2 */
@@ -73,6 +76,10 @@ void sys__exit(int exitcode) {
 
   /* if this is the last user process in the system, proc_destroy()
      will wake up the kernel menu thread */
+#if OPT_A2
+  // lol, we actually want to wait for some time first
+  clocksleep(PROC_DESTROY_TIME);
+#endif /* OPT_A2 */
   proc_destroy(p);
 
   thread_exit();
