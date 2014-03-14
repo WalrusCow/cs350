@@ -160,7 +160,7 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 	result = thread_fork("child_p_thread",child,&entry,new_tf,0); // second argument...
 	
 	if(result){
-		kfree(new_tf);
+		// free new_tf?
 		// need double check as_destroy(addrspace)
 		// should clean the file array for us: see proc.c
 		proc_destroy(child);
