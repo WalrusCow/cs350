@@ -38,6 +38,10 @@
 
 #include "opt-A2.h"
 
+#if OPT_A2
+#include <kern/wait.h>
+#endif /* OPT_A2 */
+
 /*
  * System call dispatcher.
  *
@@ -117,7 +121,7 @@ syscall(struct trapframe *tf)
 			  (int *)(&retval));
 	  break;
 	case SYS__exit:
-	  sys__exit((int)tf->tf_a0);
+	  sys__exit((int)tf->tf_a0, _EXIT_CALLED);
 	  /* sys__exit does not return, execution should not get here */
 	  panic("unexpected return from sys__exit");
 	  break;

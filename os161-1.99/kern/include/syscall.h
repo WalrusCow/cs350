@@ -61,7 +61,11 @@ int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
 
 #ifdef UW
 int sys_write(int fdesc,userptr_t ubuf,unsigned int nbytes,int *retval);
+#if OPT_A2
+void sys__exit(int exitcode, int flag);
+#else
 void sys__exit(int exitcode);
+#endif /* OPT_A2 */
 #endif // UW
 
 #if OPT_A2

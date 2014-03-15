@@ -19,6 +19,8 @@
 #include <copyinout.h>
 #include <test.h>
 
+#include <kern/wait.h>
+
 #define PROC_DESTROY_TIME 2
 
 void entry(void* data1, unsigned long data2);
@@ -28,7 +30,7 @@ void entry(void* data1, unsigned long data2);
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
 
-void sys__exit(int exitcode) {
+void sys__exit(int exitcode, int flag) {
 
   struct addrspace *as;
   struct proc *p = curproc;
@@ -46,15 +48,20 @@ void sys__exit(int exitcode) {
 	//current process should not be NULL
 	KASSERT(curproc != NULL);
 
-	//update the fields of the current process
-        curproc->exitCode = exitcode;
-        curproc->isDone = true;
-//	if(curproc->codePtr != NULL){
-//		*(curproc->codePtr) = exitcode;
-//	}
+	// update the fields of the current process
+	// Use the appropriate macro for assigning the exit code
+	if (flag == _EXIT_CALLED) {
+		kprintf("EXIT FLAG\n");
+		curproc->exitCode = _MKWAIT_EXIT(exitcode);
+	}
+	else {
+		kprintf("SIG FLAG\n");
+		curproc->exitCode = _MKWAIT_SIG(exitcode);
+	}
+	curproc->isDone = true;
 
 	//signal the wait
-        V(p->parentWait);
+	V(p->parentWait);
 
 #endif /* OPT-A2 */
 
@@ -144,12 +151,11 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 		return ENOMEM;
 	}
 	memcpy(new_tf,tf,sizeof(struct trapframe)); // trapframesize
-	
+
 	// need to increment counters
 	// 0 1 2 are initialized in proc_create
 	// same process may not change file_arr using different thread, inconsistency
 	// acquire the global lock
-	
 	for (int i = 3; i < __OPEN_MAX; ++i) {
 		if(curproc->file_arr[i]!=NULL){
 			//full copy
@@ -164,10 +170,10 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 			VOP_INCREF(child->file_arr[i]->vn);
 		}
 	}
-	
+
 	// make a new thread
 	result = thread_fork("child_p_thread",child,&entry,new_tf,0); // second argument...
-	
+
 	if(result){
 		// free new_tf?
 		// need double check as_destroy(addrspace)
@@ -177,8 +183,7 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 	}
 
 	child->parent = curproc;
-	*retval = child->pid; // TODO: Different ret val for parent & child
-
+	*retval = child->pid;
 	return 0;
 }
 
