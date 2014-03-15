@@ -51,11 +51,9 @@ void sys__exit(int exitcode, int flag) {
 	// update the fields of the current process
 	// Use the appropriate macro for assigning the exit code
 	if (flag == _EXIT_CALLED) {
-		kprintf("EXIT FLAG\n");
 		curproc->exitCode = _MKWAIT_EXIT(exitcode);
 	}
 	else {
-		kprintf("SIG FLAG\n");
 		curproc->exitCode = _MKWAIT_SIG(exitcode);
 	}
 	curproc->isDone = true;
@@ -111,9 +109,7 @@ entry(void* data1, unsigned long data2){
 	tf->tf_epc += 4;
 	tf->tf_v0 = 0; //return pid = 0
 	tf->tf_a3 = 0; // no error
-	
-/*		tf->tf_v0 = retval;
-		tf->tf_a3 = 0;      signal no error */
+
 	enter_forked_process(tf);
 }
 
