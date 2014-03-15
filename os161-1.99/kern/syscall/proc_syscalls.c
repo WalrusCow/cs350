@@ -103,7 +103,10 @@ entry(void* data1, unsigned long data2){
 	struct trapframe* tf = (struct trapframe*) data1;
 	tf->tf_epc += 4;
 	tf->tf_v0 = 0; //return pid = 0
-	tf->tf_a3 = 1; // no error
+	tf->tf_a3 = 0; // no error
+	
+/*		tf->tf_v0 = retval;
+		tf->tf_a3 = 0;      signal no error */
 	enter_forked_process(tf);
 }
 
@@ -147,7 +150,6 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 	// same process may not change file_arr using different thread, inconsistency
 	// acquire the global lock
 	
-	
 	for (int i = 3; i < __OPEN_MAX; ++i) {
 		if(curproc->file_arr[i]!=NULL){
 			//full copy
@@ -161,8 +163,7 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 			// TODO: Add refcount to sysFH table & w.e
 			VOP_INCREF(child->file_arr[i]->vn);
 		}
-	} 
-	
+	}
 	
 	// make a new thread
 	result = thread_fork("child_p_thread",child,&entry,new_tf,0); // second argument...
@@ -177,6 +178,7 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 
 	child->parent = curproc;
 	*retval = child->pid; // TODO: Different ret val for parent & child
+
 	return 0;
 }
 
