@@ -31,6 +31,12 @@
 #define _KERN_WAIT_H_
 
 /*
+ * Definitions for syscalls handling wait()
+ */
+#define _EXIT_CALLED 1
+#define PROC_SIGNALLED 2
+
+/*
  * Definitions for wait().
  */
 

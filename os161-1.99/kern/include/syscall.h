@@ -61,7 +61,11 @@ int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
 
 #ifdef UW
 int sys_write(int fdesc,userptr_t ubuf,unsigned int nbytes,int *retval);
+#if OPT_A2
+void sys__exit(int exitcode, int flag);
+#else
 void sys__exit(int exitcode);
+#endif /* OPT_A2 */
 #endif // UW
 
 #if OPT_A2
@@ -74,8 +78,8 @@ int sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval);
 
 int sys_getpid(pid_t* retval);
 int sys_fork(pid_t* retval, struct trapframe* tf);
-int sys_waitpid(pid_t pid, int* ret, int options, pid_t* retval);
-int sys_execv(const char *program, char **args);
+int sys_waitpid(pid_t pid, userptr_t ret, int options, pid_t* retval);
+int sys_execv(userptr_t program, userptr_t args, int* retval);
 
 extern struct semaphore* file_sem;
 

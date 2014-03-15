@@ -19,6 +19,8 @@
 #include <copyinout.h>
 #include <test.h>
 
+#include <kern/wait.h>
+
 #define PROC_DESTROY_TIME 2
 
 void entry(void* data1, unsigned long data2);
@@ -28,7 +30,7 @@ void entry(void* data1, unsigned long data2);
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
 
-void sys__exit(int exitcode) {
+void sys__exit(int exitcode, int flag) {
 
   struct addrspace *as;
   struct proc *p = curproc;
@@ -46,15 +48,18 @@ void sys__exit(int exitcode) {
 	//current process should not be NULL
 	KASSERT(curproc != NULL);
 
-	//update the fields of the current process
-        curproc->exitCode = exitcode;
-        curproc->isDone = true;
-//	if(curproc->codePtr != NULL){
-//		*(curproc->codePtr) = exitcode;
-//	}
+	// update the fields of the current process
+	// Use the appropriate macro for assigning the exit code
+	if (flag == _EXIT_CALLED) {
+		curproc->exitCode = _MKWAIT_EXIT(exitcode);
+	}
+	else {
+		curproc->exitCode = _MKWAIT_SIG(exitcode);
+	}
+	curproc->isDone = true;
 
 	//signal the wait
-        V(p->parentWait);
+	V(p->parentWait);
 
 #endif /* OPT-A2 */
 
@@ -104,9 +109,7 @@ entry(void* data1, unsigned long data2){
 	tf->tf_epc += 4;
 	tf->tf_v0 = 0; //return pid = 0
 	tf->tf_a3 = 0; // no error
-	
-/*		tf->tf_v0 = retval;
-		tf->tf_a3 = 0;      signal no error */
+
 	enter_forked_process(tf);
 }
 
@@ -144,12 +147,11 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 		return ENOMEM;
 	}
 	memcpy(new_tf,tf,sizeof(struct trapframe)); // trapframesize
-	
+
 	// need to increment counters
 	// 0 1 2 are initialized in proc_create
 	// same process may not change file_arr using different thread, inconsistency
 	// acquire the global lock
-	
 	for (int i = 3; i < __OPEN_MAX; ++i) {
 		if(curproc->file_arr[i]!=NULL){
 			//full copy
@@ -164,10 +166,10 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 			VOP_INCREF(child->file_arr[i]->vn);
 		}
 	}
-	
+
 	// make a new thread
 	result = thread_fork("child_p_thread",child,&entry,new_tf,0); // second argument...
-	
+
 	if(result){
 		// free new_tf?
 		// need double check as_destroy(addrspace)
@@ -177,13 +179,12 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 	}
 
 	child->parent = curproc;
-	*retval = child->pid; // TODO: Different ret val for parent & child
-
+	*retval = child->pid;
 	return 0;
 }
 
 int
-sys_waitpid(pid_t pid, int* ret, int options, pid_t* retval) {
+sys_waitpid(pid_t pid, userptr_t ret, int options, pid_t* retval) {
 	if (ret == NULL) {
 		return EFAULT; // Invalid pointer
 	}
@@ -193,6 +194,8 @@ sys_waitpid(pid_t pid, int* ret, int options, pid_t* retval) {
 	if (options) {
 		return EINVAL; // We don't support any options
 	}
+
+	int err;
 
 	P(pidTableLock);
 
@@ -210,8 +213,13 @@ sys_waitpid(pid_t pid, int* ret, int options, pid_t* retval) {
 
 	// Check if proc already done (then no need to wait), and release table lock
 	if (p->isDone) {
-		*ret = p->exitCode;
+		err = copyout((void*)&p->exitCode, ret, sizeof(int));
 		V(pidTableLock);
+		if (err) {
+			// Do not set return value on error
+			return err;
+		}
+		*retval = pid;
 		return 0;
 	}
 
@@ -221,87 +229,141 @@ sys_waitpid(pid_t pid, int* ret, int options, pid_t* retval) {
 	V(pidTableLock);
 	// Now wait on the child's semaphore
 	P(p->parentWait);
-	*ret = p->exitCode;
+	err = copyout((void*)&p->exitCode, ret, sizeof(int));
 	// Once we have the semaphore, just release it and return
 	// since the return value has already been sent
 	V(p->parentWait);
 	//release the readlock
 	rw_signal(p->wait_rw_lock, (RoW)0);
 
-	//return
+	if (err) {
+		// Do not set return value on error
+		return err;
+	}
+
+	// return value
 	*retval = pid;
 	return 0;
 }
 
-int sys_execv(const char *program, char **args){
-	int result;
+/*
+ * Takes in a string that is the program name (user_prog_name),
+ * an array of strings that are arguments (user_args) and an address
+ * at which to save the return value.
+ *
+ * Note that user_prog_name and user_args both live in userspace.
+ * user_prog_name: char*
+ * user_args: char**
+ */
+int sys_execv(userptr_t user_prog_name, userptr_t user_args, int* retval) {
+	int err = 0;
 
-	//no invalid pointer
-	if(program == NULL || args == NULL){
+	// Check that pointers aren't NULL
+	if (user_prog_name == NULL || user_args == NULL) {
+		*retval = -1;
 		return EFAULT;
 	}
 
-	//program name
-	char progname[128];
-	for(int i = 0; i < 128; i++){
-		progname[i] = '\0';
+	// Buffer to copy program name to (from userspace to kernel space)
+	char program_name[PATH_MAX + 1];
+	program_name[PATH_MAX] = '\0'; // paranoia
+
+	size_t len;
+	err = copyinstr(user_prog_name, program_name, PATH_MAX, &len);
+	// Copy failed - invalid pointer or other
+	if (err) {
+		*retval = -1;
+		return err;
+	}
+	// Name was empty string, which is a non-existent file
+	if (strlen(program_name) == 0) {
+		*retval = -1;
+		return EINVAL;
 	}
 
-	result = copyin((const_userptr_t)program, progname, sizeof(char) * (strlen(program) + 1));
-	//fail
-	if(result){
-		return result;
-	}
-	//no program name
-	if(strlen(progname) == 0){
-		return ENOEXEC;
-	}
-	//the size of progname is too long
-	if(progname[127] != '\0'){
-		return ENOEXEC;
-	}
+	// Check if args is a valid pointer in userspace, in a jokes way
+	char testByte;
+	err = copyin((userptr_t)user_args, &testByte, sizeof(char));
+	if (err) return err;
 
-	//intial argv
-	unsigned long nargs = 0;
-	char** argv;
-	//check the total size of argument strings
-	int arguments_size = 0;
+	// TODO: We need to check if *all* of the args are valid pointers
+	// (but this edge case may not come up in tests)
 
-	int* address;
-	//check valid address in user space
-	result = copyin((const_userptr_t)args, address, sizeof(int));
-	if(result) return result;
-
-	//find the nargs
-	while(args[nargs] != NULL){
-		result = copyin((const_userptr_t)args[nargs], address, sizeof(int));
-		if(result) return result;
+	// Find the nargs
+	unsigned int nargs = 0;
+	userptr_t* user_arg_arr = (userptr_t*)user_args;
+	while(user_arg_arr[nargs] != NULL) {
+		// Not necessary checking here
+		//err = copyin((userptr_t)user_arg_arr[nargs], &testByte, sizeof(char))
+		//if(err) return err;
 		nargs += 1;
 	}
 
-	//malloc size of argv
-	argv = kmalloc(sizeof(char*) *  (nargs + 1));
+	// malloc size of argv
+	char** argv = kmalloc(sizeof(char*) * (nargs + 1));
+	if (argv == NULL) {
+		*retval = -1;
+		return ENOMEM;
+	}
 
-	for(unsigned long i = 0; i < nargs; i++){
-		int len = strlen(args[i]) + 1;
-		argv[i] = kmalloc(sizeof(char) * len);
-		result = copyin((const_userptr_t)args[i], argv[i], sizeof(char) * len);
-		if(result) return result;
-		if((arguments_size + len) > ARGUMENT_SIZE_MAX){
+	// Where we will copy to (on the *stack*)
+	char arg[ARGUMENT_SIZE_MAX + 1];
+	arg[ARGUMENT_SIZE_MAX] = '\0';
+
+	unsigned int actual_arg_size = 0;
+	for(unsigned int i = 0; i < nargs; i++){
+		err = copyinstr(user_arg_arr[i], arg, ARGUMENT_SIZE_MAX, &len);
+
+		if (err) {
+			// Free everything previous and return result
+			for (unsigned int j = 0; j < i; ++j) kfree(argv[j]);
+			kfree(argv);
+			*retval = -1;
+			return err;
+		}
+
+		actual_arg_size += len;
+		if (actual_arg_size > ARGUMENT_SIZE_MAX) {
+			// Free everything previous and return result
+			for (unsigned int j = 0; j < i; ++j) kfree(argv[j]);
+			kfree(argv);
+			*retval = -1;
 			return E2BIG;
 		}
-		arguments_size += len;
+
+		argv[i] = kmalloc(sizeof(char)*(len + 1));
+		if (argv[i] == NULL) {
+			// Free everything previous and return ENOMEM
+			for (unsigned int j = 0; j < i; ++j) kfree(argv[j]);
+			kfree(argv);
+			*retval = -1;
+			return ENOMEM;
+		}
+		argv[i][len] = '\0'; // paranoia
+
+		// Copy arg to argv[i]
+		strcpy(argv[i], arg);
+		// TODO: use strcpy ?
+		//for (unsigned int j = 0; arg[j]; ++j) {
+		//	argv[i][j] = arg[j];
+		//}
 	}
 
 	as_destroy(curproc->p_addrspace);
 	curproc->p_addrspace = NULL;
 
-	//execute the program
-	result = runprogram(progname, nargs, argv);
-	if(result) return result;
+	// execute the program
+	// TODO: Do we actually have to kmalloc?
+	// Can we leave it on the stack?
+	err = runprogram(program_name, nargs, argv);
 
-	//success
-	return 0;
+	// Free the things
+	for (unsigned int i = 0; i < nargs; ++i) kfree(argv[i]);
+	kfree(argv);
+
+	// runprogram should not return
+	*retval = -1;
+	return err;
 }
 
 #endif /* OPT_A2 */

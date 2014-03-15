@@ -28,10 +28,6 @@ struct sysFH {
 	struct rwlock* rwlock; // readerwriter lock
 };
 
-// Buffer for the file path when opening a file
-// Initialize to all terminators, for paranoia's sake
-char open_name_buffer[PATH_MAX + 1] = {'\0'};
-
 // Global file descriptors
 struct sysFH* sysFH_table[SYS_OPEN_MAX];
 // Global lock for file system calls
@@ -106,6 +102,10 @@ sys_open(userptr_t filename, int flags, int* retval) {
 	if ((flags & O_EXCL) && !(flags & O_CREAT)) {
 		return EINVAL;
 	}
+
+	// Buffer for the file path when opening a file
+	char open_name_buffer[PATH_MAX + 1];
+	open_name_buffer[PATH_MAX] = '\0'; // paranoia
 
 	size_t len;
 	int err = copyinstr(filename, open_name_buffer, PATH_MAX, &len);
