@@ -323,8 +323,6 @@ proc_bootstrap(void)
  *
  * NOTE: The structure will have a pid of -1 if there were no pids
  * available.
- * TODO: Probably change this to have an error code return, or take
- * a proc** as argument and set that (and return error code).
  */
 struct proc *
 proc_create_runprogram(const char *name)

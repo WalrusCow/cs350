@@ -27,9 +27,6 @@ void entry(void* data1, unsigned long data2);
 
 #endif /* OPT_A2 */
 
-  /* this implementation of sys__exit does not do anything with the exit code */
-  /* this needs to be fixed to get exit() and waitpid() working properly */
-
 void sys__exit(int exitcode, int flag) {
 
   struct addrspace *as;
@@ -162,8 +159,9 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 				return ENOMEM;
 			}
 			memcpy(child->file_arr[i],curproc->file_arr[i],sizeof(struct procFH));
-			// TODO: Add refcount to sysFH table & w.e
+			// Increase the counts for the vnode
 			VOP_INCREF(child->file_arr[i]->vn);
+			VOP_INCOPEN(child->file_arr[i]->vn);
 		}
 	}
 
@@ -343,18 +341,13 @@ int sys_execv(userptr_t user_prog_name, userptr_t user_args, int* retval) {
 
 		// Copy arg to argv[i]
 		strcpy(argv[i], arg);
-		// TODO: use strcpy ?
-		//for (unsigned int j = 0; arg[j]; ++j) {
-		//	argv[i][j] = arg[j];
-		//}
 	}
 
 	as_destroy(curproc->p_addrspace);
 	curproc->p_addrspace = NULL;
 
 	// execute the program
-	// TODO: Do we actually have to kmalloc?
-	// Can we leave it on the stack?
+	// Can we leave args and name on the stack?
 	err = runprogram(program_name, nargs, argv);
 
 	// Free the things
