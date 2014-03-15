@@ -184,7 +184,7 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 }
 
 int
-sys_waitpid(pid_t pid, int* ret, int options, pid_t* retval) {
+sys_waitpid(pid_t pid, userptr_t ret, int options, pid_t* retval) {
 	if (ret == NULL) {
 		return EFAULT; // Invalid pointer
 	}
@@ -194,6 +194,8 @@ sys_waitpid(pid_t pid, int* ret, int options, pid_t* retval) {
 	if (options) {
 		return EINVAL; // We don't support any options
 	}
+
+	int err;
 
 	P(pidTableLock);
 
@@ -211,8 +213,13 @@ sys_waitpid(pid_t pid, int* ret, int options, pid_t* retval) {
 
 	// Check if proc already done (then no need to wait), and release table lock
 	if (p->isDone) {
-		*ret = p->exitCode;
+		err = copyout((void*)&p->exitCode, ret, sizeof(int));
 		V(pidTableLock);
+		if (err) {
+			// Do not set return value on error
+			return err;
+		}
+		*retval = pid;
 		return 0;
 	}
 
@@ -222,14 +229,19 @@ sys_waitpid(pid_t pid, int* ret, int options, pid_t* retval) {
 	V(pidTableLock);
 	// Now wait on the child's semaphore
 	P(p->parentWait);
-	*ret = p->exitCode;
+	err = copyout((void*)&p->exitCode, ret, sizeof(int));
 	// Once we have the semaphore, just release it and return
 	// since the return value has already been sent
 	V(p->parentWait);
 	//release the readlock
 	rw_signal(p->wait_rw_lock, (RoW)0);
 
-	//return
+	if (err) {
+		// Do not set return value on error
+		return err;
+	}
+
+	// return value
 	*retval = pid;
 	return 0;
 }
