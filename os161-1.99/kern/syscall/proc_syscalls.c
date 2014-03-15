@@ -280,8 +280,15 @@ int sys_execv(const char *program, char **args){
 	//check the total size of argument strings
 	int arguments_size = 0;
 
+	int* address;
+	//check valid address in user space
+	result = copyin((const_userptr_t)args, address, sizeof(int));
+	if(result) return result;
+
 	//find the nargs
 	while(args[nargs] != NULL){
+		result = copyin((const_userptr_t)args[nargs], address, sizeof(int));
+		if(result) return result;
 		nargs += 1;
 	}
 
