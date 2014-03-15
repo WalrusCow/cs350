@@ -38,6 +38,9 @@
 
 #include "opt-A2.h"
 
+#if OPT_A2
+#include <copyinout.h>
+#endif
 /*
  * System call dispatcher.
  *
@@ -209,7 +212,7 @@ enter_forked_process(struct trapframe *tf)
 #if OPT_A2
 	// going to user mode, can not use kernal whatever is kmalloc
 	struct trapframe tfOnStack;
-	memcpy(&tfOnStack,tf,sizeof(struct trapframe));
+	copyout(tf,(userptr_t)&tfOnStack,sizeof(struct trapframe));
 	kfree(tf);
 	mips_usermode(&tfOnStack);
 #endif
