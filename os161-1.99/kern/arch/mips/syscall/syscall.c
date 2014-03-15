@@ -210,6 +210,7 @@ enter_forked_process(struct trapframe *tf)
 	// going to user mode, can not use kernal whatever is kmalloc
 	struct trapframe tfOnStack;
 	memcpy(&tfOnStack,tf,sizeof(struct trapframe));
+	kfree(tf);
 	mips_usermode(&tfOnStack);
 #endif
 }
