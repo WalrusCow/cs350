@@ -215,5 +215,6 @@ enter_forked_process(struct trapframe *tf)
 	copyout(tf,(userptr_t)&tfOnStack,sizeof(struct trapframe));
 	kfree(tf);
 	mips_usermode(&tfOnStack);
+	panic("wtf, it's us!???\n");
 #endif
 }
