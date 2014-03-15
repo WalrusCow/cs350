@@ -278,7 +278,7 @@ int sys_execv(userptr_t user_prog_name, userptr_t user_args, int* retval) {
 	// Name was empty string, which is a non-existent file
 	if (strlen(program_name) == 0) {
 		*retval = -1;
-		return ENOENT;
+		return EINVAL;
 	}
 
 	// Check if args is a valid pointer in userspace, in a jokes way
