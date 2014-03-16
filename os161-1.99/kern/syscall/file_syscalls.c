@@ -28,10 +28,6 @@ struct sysFH {
 	struct rwlock* rwlock; // readerwriter lock
 };
 
-// Buffer for the file path when opening a file
-// Initialize to all terminators, for paranoia's sake
-char open_name_buffer[PATH_MAX + 1] = {'\0'};
-
 // Global file descriptors
 struct sysFH* sysFH_table[SYS_OPEN_MAX];
 // Global lock for file system calls
@@ -106,6 +102,10 @@ sys_open(userptr_t filename, int flags, int* retval) {
 	if ((flags & O_EXCL) && !(flags & O_CREAT)) {
 		return EINVAL;
 	}
+
+	// Buffer for the file path when opening a file
+	char open_name_buffer[PATH_MAX + 1];
+	open_name_buffer[PATH_MAX] = '\0'; // paranoia
 
 	size_t len;
 	int err = copyinstr(filename, open_name_buffer, PATH_MAX, &len);
@@ -224,7 +224,6 @@ sys_open(userptr_t filename, int flags, int* retval) {
 
 /*
  * handler for close() system call
- * TODO: Add docs here
  */
 int
 sys_close(int fd) {
@@ -278,24 +277,6 @@ sys_close(int fd) {
 		sysFH_table[index] = NULL;
 	}
 
-	// Check the system file handler, if no process use this, free it
-
-	/* TODO: This doesn't work -- how to free in the system table?
-	 * Idea: Look at the vfs code and determine what the value of the
-	 * vnode is that should be 0 (or 1) if nobody else is using this vnode
-	 * and then free sysFH_table entry in that case
-	 *
-	 * As such, it is always false for now.
-	 */
-/*	if (0 && sysFH_table[index]->vn == NULL) {
-		if (sysFH_table[index]->rwlock != NULL) {
-			rw_destroy(sysFH_table[index]->rwlock);
-		}
-
-		kfree(sysFH_table[index]);
-		sysFH_table[index] = NULL;
-	}
-*/
 	V(file_sem);
 
 	// Success
@@ -304,7 +285,6 @@ sys_close(int fd) {
 
 /*
  * handler for read() system call
- * TODO: Add docs here
  */
 int
 sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval) {
@@ -366,7 +346,8 @@ sys_read(int fdesc, userptr_t ubuf, unsigned int nbytes, int* retval) {
   *retval = nbytes - u.uio_resid;
   KASSERT(*retval >= 0);
 
-  p_fh->offset += *retval; // update offset
+  // Update offset, but not for the console
+  if (fdesc > 2) p_fh->offset += *retval;
   rw_signal(sys_fh->rwlock,(RoW)0);
 
   return res; // error or success;
@@ -430,9 +411,6 @@ sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
   iov.iov_len = nbytes;
   u.uio_iov = &iov;
   u.uio_iovcnt = 1;
-  // TODO: Does this offset need to be something else?
-  // i.e. does it always need to be 0 but we need to call some VOP to
-  // shift our posn in the file first?
   u.uio_offset = p_fh->offset; // Set appropriate offset
   u.uio_resid = nbytes;
   u.uio_segflg = UIO_USERSPACE;
@@ -452,7 +430,8 @@ sys_write(int fdesc, userptr_t ubuf, unsigned int nbytes, int *retval)
   KASSERT(*retval >= 0);
 
   // Also increment the offset by how much we wrote
-  p_fh->offset += numWritten;
+  // ... except for the consoles
+  if (fdesc > 2) p_fh->offset += numWritten;
   rw_signal(sys_fh->rwlock,(RoW)1);
 
   return 0;

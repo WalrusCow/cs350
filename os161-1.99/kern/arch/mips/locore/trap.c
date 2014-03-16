@@ -42,6 +42,10 @@
 
 #include "opt-A2.h"
 
+#if OPT_A2
+#include <kern/wait.h>
+#endif /* OPT_A2 */
+
 /* in exception.S */
 extern void asm_usermode(struct trapframe *tf);
 
@@ -117,7 +121,7 @@ kill_curthread(vaddr_t epc, unsigned code, vaddr_t vaddr)
 		code, sig, trapcodenames[code], epc, vaddr);
 
 #if OPT_A2
-	sys__exit(sig);
+	sys__exit(sig, PROC_SIGNALLED);
 #else
 	panic("I don't know how to handle this\n");
 #endif /* OPT_A2 */
