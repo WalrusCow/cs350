@@ -152,7 +152,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         switch (faulttype) {
             case VM_FAULT_READONLY:
 		//read-only
-		return 1;
+//		return 1;
                 /* We always create pages read-write, so we can't get this */
                 panic("dumbvm: got VM_FAULT_READONLY\n");
             case VM_FAULT_READ:
@@ -236,7 +236,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		vmstats_inc(VMSTAT_TLB_FAULT_FREE);
                 ehi = faultaddress;
 		if(segment_type == 0){
-			elo = paddr | TLBLO_VALID;
+			elo = paddr | TLBLO_VALID | TLBLO_DIRTY;
 		}
 		else{
 	                elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
@@ -252,7 +252,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         int index = tlb_get_rr_victim();
         ehi = faultaddress;
 	if(segment_type == 0){
-		elo = paddr | TLBLO_VALID;
+		elo = paddr | TLBLO_VALID | TLBLO_DIRTY;
 	}
 	else{
 	        elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
