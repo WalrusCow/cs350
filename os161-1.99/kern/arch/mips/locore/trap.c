@@ -242,15 +242,15 @@ mips_trap(struct trapframe *tf)
 	 */
 	switch (code) {
 	case EX_MOD:
-#if OPT_A3
-		kill_curthread(tf->tf_epc, code, tf->tf_vaddr);
-		goto done;
-#else
+//#if OPT_A3
+//		kill_curthread(tf->tf_epc, code, tf->tf_vaddr);
+//		goto done;
+//#else
 		if (vm_fault(VM_FAULT_READONLY, tf->tf_vaddr)==0) {
 			goto done;
 		}
 		break;
-#endif /* OPT-A3 */
+//#endif /* OPT-A3 */
 	case EX_TLBL:
 		if (vm_fault(VM_FAULT_READ, tf->tf_vaddr)==0) {
 			goto done;
