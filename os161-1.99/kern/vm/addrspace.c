@@ -43,7 +43,7 @@
 #include <current.h>
 #include <mips/tlb.h>
 #include <uw-vmstats.h>
-
+#include <pt.h>
 
 static
 void
@@ -72,12 +72,18 @@ as_create(void)
         }
 
         as->as_vbase1 = 0;
-        as->as_pbase1 = 0;
         as->as_npages1 = 0;
         as->as_vbase2 = 0;
-        as->as_pbase2 = 0;
         as->as_npages2 = 0;
         as->as_stackpbase = 0;
+
+	//page table
+	as->text_pt = 0;
+	as->data_pt = 0;
+	as->stack_pt = 0;
+
+	//vnode
+	as->as_vn = 0;
 
         return as;
 
@@ -114,27 +120,38 @@ as_copy(struct addrspace *old, struct addrspace **ret)
         new->as_vbase2 = old->as_vbase2;
         new->as_npages2 = old->as_npages2;
 
+
+
         /* (Mis)use as_prepare_load to allocate some physical memory. */
         if (as_prepare_load(new)) {
                 as_destroy(new);
                 return ENOMEM;
         }
 
-        KASSERT(new->as_pbase1 != 0);
-        KASSERT(new->as_pbase2 != 0);
+//        KASSERT(new->as_pbase1 != 0);
+//        KASSERT(new->as_pbase2 != 0);
+
+
         KASSERT(new->as_stackpbase != 0);
 
-        memmove((void *)PADDR_TO_KVADDR(new->as_pbase1),
-                (const void *)PADDR_TO_KVADDR(old->as_pbase1),
-                old->as_npages1*PAGE_SIZE);
+	//copy the vnode and page table in the address space
+	new->as_vn = old->as_vn;
+	new->text_pt = kmalloc(sizeof(paddr_t) * new->as_npages1);
+	new->data_pt = kmalloc(sizeof(paddr_t) * new->as_npages2);
+	//Do the deep copy? what about stack? use memmove?
 
-        memmove((void *)PADDR_TO_KVADDR(new->as_pbase2),
-                (const void *)PADDR_TO_KVADDR(old->as_pbase2),
-                old->as_npages2*PAGE_SIZE);
 
-        memmove((void *)PADDR_TO_KVADDR(new->as_stackpbase),
-                (const void *)PADDR_TO_KVADDR(old->as_stackpbase),
-                DUMBVM_STACKPAGES*PAGE_SIZE);
+//        memmove((void *)PADDR_TO_KVADDR(new->as_pbase1),
+//                (const void *)PADDR_TO_KVADDR(old->as_pbase1),
+//                old->as_npages1*PAGE_SIZE);
+
+//        memmove((void *)PADDR_TO_KVADDR(new->as_pbase2),
+//                (const void *)PADDR_TO_KVADDR(old->as_pbase2),
+//                old->as_npages2*PAGE_SIZE);
+
+//        memmove((void *)PADDR_TO_KVADDR(new->as_stackpbase),
+//                (const void *)PADDR_TO_KVADDR(old->as_stackpbase),
+//                DUMBVM_STACKPAGES*PAGE_SIZE);
         
         *ret = new;
         return 0;
@@ -277,13 +294,49 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 
         if (as->as_vbase1 == 0) {
                 as->as_vbase1 = vaddr;
-                as->as_npages1 = npages;
+
+		//malloc the space for the text segment page table
+		as->text_pt = kmalloc(sizeof(paddr_t) * (npages));
+
+		//initialize the page table
+		for(size_t i = 0; i < npages; i++){
+			as->text_pt[i] = 0;
+			if(readable){
+				as->text_pt[i] = as->text_pt[i] | PT_READ;
+			}
+			if(writeable){
+				as->text_pt[i] = as->text_pt[i] | PT_WRITE;
+			}
+			if(executable){
+				as->text_pt[i] = as->text_pt[i] | PT_EXE;
+			}
+		}
+
+//                as->as_npages1 = npages;
                 return 0;
         }
 
         if (as->as_vbase2 == 0) {
                 as->as_vbase2 = vaddr;
-                as->as_npages2 = npages;
+
+		//malloc the space for the data segment page table
+		as->data_pt = kmalloc(sizeof(paddr_t) * (npages));
+
+		//initialize the page table
+		for(size_t i = 0; i < npages; i++){
+			as->data_pt[i] = 0;
+			if(readable){
+				as->data_pt[i] = as->data_pt[i] | PT_READ;
+			}
+			if(writeable){
+				as->data_pt[i] = as->data_pt[i] | PT_WRITE;
+			}
+			if(executable){
+				as->data_pt[i] = as->data_pt[i] | PT_EXE;
+			}
+		}
+
+//                as->as_npages2 = npages;
                 return 0;
         }
 
@@ -308,10 +361,12 @@ int
 as_prepare_load(struct addrspace *as)
 {
 	#if OPT_A3
+
+	(void) as;
 	/*
 	 * Write this.
 	 */
-        KASSERT(as->as_pbase1 == 0);
+/*        KASSERT(as->as_pbase1 == 0);
         KASSERT(as->as_pbase2 == 0);
         KASSERT(as->as_stackpbase == 0);
 
@@ -329,10 +384,11 @@ as_prepare_load(struct addrspace *as)
         if (as->as_stackpbase == 0) {
                 return ENOMEM;
         }
-        
-        as_zero_region(as->as_pbase1, as->as_npages1);
-        as_zero_region(as->as_pbase2, as->as_npages2);
+*/        
         as_zero_region(as->as_stackpbase, DUMBVM_STACKPAGES);
+
+
+
 
         return 0;
 
