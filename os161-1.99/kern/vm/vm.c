@@ -208,8 +208,17 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	//get the paddr
 	int result = pt_getEntry(faultaddress, &paddr, &segment_type);
+	
 	if(result) return result;
 
+	if(paddr|PT_VALID != paddr){
+		// not in paddr
+		int result = pt_loadPage(faultaddress, &paddr, as,segment_type);
+		// pass in as, since now it does not have to be current address
+		// space because load page may take a will -> yield cpu to other
+		// process
+		if(result) return result;
+	}
 /*
         if (faultaddress >= vbase1 && faultaddress < vtop1) {
                 paddr = (faultaddress - vbase1) + as->as_pbase1;

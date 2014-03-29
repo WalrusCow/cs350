@@ -12,4 +12,6 @@ int pt_getEntry(vaddr_t vaddr, paddr_t* paddr, int* segment_type);
 
 int pt_setEntry(vaddr_t vaddr, paddr_t paddr);
 
+int pt_loadPage(vaddr_t vaddr, paddr_t* paddr, struct addrspace *as, int segment_type);
+
 #endif /* OPT-A3 */

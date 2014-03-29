@@ -183,6 +183,92 @@ pt_setEntry(vaddr_t vaddr, paddr_t paddr){
                 return EFAULT;
         }
 
-
 }
+
+/* use VOP_READ to load a page
+*/
+int pt_loadPage(vaddr_t vaddr, paddr_t* paddr, struct addrspace *as, int segment_type){
+	
+	off_t vnode_page_offset;
+	size_t readsize = PAGE_SIZE;
+	switch(segment_type){
+		case 2:
+			// stack
+			// get page, then zero region
+			return 0;
+		case 0:
+			vnode_page_offset=vaddr - as->as_vbase1 +  as->as_vbase1_offset;
+			if(vnode_page_offset+PAGE_SIZE>as->as_vbase1_filesize){
+				readsize = as->as_vbase1_filesize-vnode_page_offset;
+			}
+			break;
+		case 1:
+			vnode_page_offset=vaddr - as->as_vbase2 + as->as_vbase2_offset;
+			if(vnode_page_offset+PAGE_SIZE>as->as_vbase2_filesize){
+				readsize = as->as_vbase2_filesize-vnode_page_offset;
+			}
+			break;
+			// text or data
+			// calculate offset
+	}
+	
+	struct iovec iov;
+	struct uio u;
+	int result;
+
+	DEBUG(DB_EXEC, "ELF: Loading %lu bytes to 0x%lx\n", 
+	      (unsigned long) filesize, (unsigned long) vaddr);
+
+	iov.iov_ubase = (userptr_t)vaddr; // start of vaddrs
+	iov.iov_len = PAGE_SIZE;		 // length of the memory space
+	u.uio_iov = &iov;
+	u.uio_iovcnt = 1;
+	u.uio_resid = readsize;          // amount to read from the file
+	u.uio_offset = vnode_page_offset;
+	u.uio_segflg = is_executable ? UIO_USERISPACE : UIO_USERSPACE;
+	u.uio_rw = UIO_READ;
+	u.uio_space = as;
+
+	result = VOP_READ(v, &u);
+	if (result) {
+		return result;
+	}
+
+	if (u.uio_resid != 0) {
+		/* short read; problem with executable? */
+		kprintf("ELF: short read on segment - file truncated?\n");
+		return ENOEXEC;
+	}
+
+	/*
+	 * If memsize > filesize, the remaining space should be
+	 * zero-filled. There is no need to do this explicitly,
+	 * because the VM system should provide pages that do not
+	 * contain other processes' data, i.e., are already zeroed.
+	 *
+	 * During development of your VM system, it may have bugs that
+	 * cause it to (maybe only sometimes) not provide zero-filled
+	 * pages, which can cause user programs to fail in strange
+	 * ways. Explicitly zeroing program BSS may help identify such
+	 * bugs, so the following disabled code is provided as a
+	 * diagnostic tool. Note that it must be disabled again before
+	 * you submit your code for grading.
+	 */
+#if 0
+	{
+		size_t fillamt;
+
+		fillamt = memsize - filesize;
+		if (fillamt > 0) {
+			DEBUG(DB_EXEC, "ELF: Zero-filling %lu more bytes\n", 
+			      (unsigned long) fillamt);
+			u.uio_resid += fillamt;
+			result = uiomovezeros(fillamt, &u);
+		}
+	}
+#endif
+	
+	return result;
+}
+
 #endif /* OPT-A3 */
