@@ -198,12 +198,18 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         stackbase = USERSTACK - DUMBVM_STACKPAGES * PAGE_SIZE;
         stacktop = USERSTACK;
 
+	/* segment type
+	 * 0 for text segment
+	 * 1 for data segment
+	 * 2 for stack segment
+	 */
+
+	int segment_type;
+
 	//get the paddr
-	int result = pt_getEntry(faultaddress, &paddr);
+	int result = pt_getEntry(faultaddress, &paddr, &segment_type);
 	if(result) return result;
 
-	//no need any more
-//	int segment_type;
 /*
         if (faultaddress >= vbase1 && faultaddress < vtop1) {
                 paddr = (faultaddress - vbase1) + as->as_pbase1;
