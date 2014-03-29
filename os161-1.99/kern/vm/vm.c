@@ -21,6 +21,7 @@
 #include <current.h>
 #include <mips/tlb.h>
 #include <uw-vmstats.h>
+#include <pt.h>
 
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
@@ -182,16 +183,12 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
         /* Assert that the address space has been set up properly. */
         KASSERT(as->as_vbase1 != 0);
-        KASSERT(as->as_pbase1 != 0);
         KASSERT(as->as_npages1 != 0);
         KASSERT(as->as_vbase2 != 0);
-        KASSERT(as->as_pbase2 != 0);
         KASSERT(as->as_npages2 != 0);
         KASSERT(as->as_stackpbase != 0);
         KASSERT((as->as_vbase1 & PAGE_FRAME) == as->as_vbase1);
-        KASSERT((as->as_pbase1 & PAGE_FRAME) == as->as_pbase1);
         KASSERT((as->as_vbase2 & PAGE_FRAME) == as->as_vbase2);
-        KASSERT((as->as_pbase2 & PAGE_FRAME) == as->as_pbase2);
         KASSERT((as->as_stackpbase & PAGE_FRAME) == as->as_stackpbase);
 
         vbase1 = as->as_vbase1;
@@ -201,8 +198,13 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         stackbase = USERSTACK - DUMBVM_STACKPAGES * PAGE_SIZE;
         stacktop = USERSTACK;
 
-	int segment_type;
+	//get the paddr
+	int result = pt_getEntry(faultaddress, &paddr);
+	if(result) return result;
 
+	//no need any more
+//	int segment_type;
+/*
         if (faultaddress >= vbase1 && faultaddress < vtop1) {
                 paddr = (faultaddress - vbase1) + as->as_pbase1;
 		segment_type = 0;
@@ -218,7 +220,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
         else {
                 return EFAULT;
         }
-
+*/
         /* make sure it's page-aligned */
         KASSERT((paddr & PAGE_FRAME) == paddr);
 
@@ -235,12 +237,12 @@ vm_fault(int faulttype, vaddr_t faultaddress)
                 }
 		vmstats_inc(VMSTAT_TLB_FAULT_FREE);
                 ehi = faultaddress;
-		if(segment_type == 0){
-			elo = paddr | TLBLO_VALID | TLBLO_DIRTY;
-		}
-		else{
+//		if(segment_type == 0){
+//			elo = paddr | TLBLO_VALID | TLBLO_DIRTY;
+//		}
+//		else{
 	                elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
-		}
+//		}
                 DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, paddr);
                 tlb_write(ehi, elo, i);
                 splx(spl);
@@ -251,12 +253,12 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	vmstats_inc(VMSTAT_TLB_FAULT_REPLACE);
         int index = tlb_get_rr_victim();
         ehi = faultaddress;
-	if(segment_type == 0){
-		elo = paddr | TLBLO_VALID | TLBLO_DIRTY;
-	}
-	else{
+//	if(segment_type == 0){
+//		elo = paddr | TLBLO_VALID | TLBLO_DIRTY;
+//	}
+//	else{
 	        elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
-	}
+//	}
         DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, paddr);
         tlb_write(ehi, elo, index);
         splx(spl);

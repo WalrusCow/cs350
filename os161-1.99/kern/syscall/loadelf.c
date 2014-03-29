@@ -59,7 +59,7 @@
 #include <addrspace.h>
 #include <vnode.h>
 #include <elf.h>
-
+#include "opt-A3.h"
 /*
  * Load a segment at virtual address VADDR. The segment in memory
  * extends from VADDR up to (but not including) VADDR+MEMSIZE. The
@@ -81,6 +81,17 @@ load_segment(struct addrspace *as, struct vnode *v,
 	     size_t memsize, size_t filesize,
 	     int is_executable)
 {
+#if OPT_A3
+	(void)as;
+	(void)v;
+	(void)offset;
+	(void)vaddr;
+	(void)memsize;
+	(void)filesize;
+	(void)is_executable;
+
+	return 0;
+#else
 	struct iovec iov;
 	struct uio u;
 	int result;
@@ -143,6 +154,7 @@ load_segment(struct addrspace *as, struct vnode *v,
 #endif
 	
 	return result;
+#endif /* OPT-A3 */
 }
 
 /*
@@ -161,6 +173,8 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 	struct addrspace *as;
 
 	as = curproc_getas();
+
+	as->as_vn = v;
 
 	/*
 	 * Read the executable header from offset 0 in the file.
@@ -261,7 +275,11 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 	/*
 	 * Now actually load each segment.
 	 */
-
+#if OPT_A3
+               result = load_segment(as, v, ph.p_offset, ph.p_vaddr, 
+                                      ph.p_memsz, ph.p_filesz,
+                                      ph.p_flags & PF_X);
+#else
 	for (i=0; i<eh.e_phnum; i++) {
 		off_t offset = eh.e_phoff + i*eh.e_phentsize;
 		uio_kinit(&iov, &ku, &ph, sizeof(ph), offset, UIO_READ);
@@ -295,7 +313,7 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 			return result;
 		}
 	}
-
+#endif /* OPT-A3 */
 	result = as_complete_load(as);
 	if (result) {
 		return result;
