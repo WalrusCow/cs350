@@ -67,25 +67,25 @@ as_create(void)
 	#if OPT_A3
 
 	struct addrspace *as = kmalloc(sizeof(struct addrspace));
-        if (as==NULL) {
-                return NULL;
-        }
+	if (as==NULL) {
+			return NULL;
+	}
 
-        as->as_vbase1 = 0;
-        as->as_npages1 = 0;
-        as->as_vbase2 = 0;
-        as->as_npages2 = 0;
-        as->as_stackpbase = 0;
+	as->as_vbase1 = 0;
+	as->as_npages1 = 0;
+	as->as_vbase2 = 0;
+	as->as_npages2 = 0;
+	as->as_stackpbase = 0;
 
 	//page table
-	as->text_pt = 0;
-	as->data_pt = 0;
-	as->stack_pt = 0;
+	as->text_pt = NULL;
+	as->data_pt = NULL;
+	as->stack_pt = NULL;
 
 	//vnode
 	as->as_vn = 0;
 
-        return as;
+	return as;
 
 	#else
 	struct addrspace *as;
@@ -108,38 +108,38 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 {
 	#if OPT_A3
 
-        struct addrspace *new;
+	struct addrspace *new;
 
-        new = as_create();
-        if (new==NULL) {
-                return ENOMEM;
-        }
+	new = as_create();
+	if (new==NULL) {
+		return ENOMEM;
+	}
 
-        new->as_vbase1 = old->as_vbase1;
-        new->as_npages1 = old->as_npages1;
-        new->as_vbase2 = old->as_vbase2;
-        new->as_npages2 = old->as_npages2;
+	new->as_vbase1 = old->as_vbase1;
+	new->as_npages1 = old->as_npages1;
+	new->as_vbase2 = old->as_vbase2;
+	new->as_npages2 = old->as_npages2;
 
+	/* (Mis)use as_prepare_load to allocate some physical memory. */
+	if (as_prepare_load(new)) {
+		as_destroy(new);
+		return ENOMEM;
+	}
 
-
-        /* (Mis)use as_prepare_load to allocate some physical memory. */
-        if (as_prepare_load(new)) {
-                as_destroy(new);
-                return ENOMEM;
-        }
-
-//        KASSERT(new->as_pbase1 != 0);
-//        KASSERT(new->as_pbase2 != 0);
+	//KASSERT(new->as_pbase1 != 0);
+	//KASSERT(new->as_pbase2 != 0);
 
 
-        KASSERT(new->as_stackpbase != 0);
+	KASSERT(new->as_stackpbase != 0);
 
 	//copy the vnode and page table in the address space
+	// TODO: increment references
 	new->as_vn = old->as_vn;
 	new->text_pt = kmalloc(sizeof(paddr_t) * new->as_npages1);
 	new->data_pt = kmalloc(sizeof(paddr_t) * new->as_npages2);
-	//Do the deep copy? what about stack? use memmove?
+	new->stack_pt = NULL; // TODO: Do we kmalloc here?
 
+	//Do the deep copy? what about stack? use memmove?
 
 //        memmove((void *)PADDR_TO_KVADDR(new->as_pbase1),
 //                (const void *)PADDR_TO_KVADDR(old->as_pbase1),
@@ -153,8 +153,8 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 //                (const void *)PADDR_TO_KVADDR(old->as_stackpbase),
 //                DUMBVM_STACKPAGES*PAGE_SIZE);
         
-        *ret = new;
-        return 0;
+	*ret = new;
+	return 0;
 
 	#else
 	struct addrspace *newas;
@@ -181,13 +181,12 @@ as_destroy(struct addrspace *as)
 
 	#if OPT_A3
 
+	kfree(as->text_pt);
+	kfree(as->data_pt);
+	if (as->stack_pt != NULL) kfree(as->stack_pt);
 	kfree(as);
 
 	#else
-	/*
-	 * Clean up as needed.
-	 */
-	
 	kfree(as);
 	#endif /* OPT-A3 */
 }
@@ -198,29 +197,28 @@ as_activate(void)
 
 	#if OPT_A3
 
-        int i, spl;
-        struct addrspace *as;
+	int i, spl;
+	struct addrspace *as;
 
-        as = curproc_getas();
+	as = curproc_getas();
 #ifdef UW
-        /* Kernel threads don't have an address spaces to activate */
+	/* Kernel threads don't have an address spaces to activate */
 #endif
-        if (as == NULL) {
-                return;
-        }
+	if (as == NULL) {
+			return;
+	}
 
-        /* Disable interrupts on this CPU while frobbing the TLB. */
-        spl = splhigh();
+	/* Disable interrupts on this CPU while frobbing the TLB. */
+	spl = splhigh();
 
-        for (i=0; i<NUM_TLB; i++) {
-                tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
-        }
+	for (i=0; i<NUM_TLB; i++) {
+			tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+	}
 
-        vmstats_inc(VMSTAT_TLB_INVALIDATE);
+	vmstats_inc(VMSTAT_TLB_INVALIDATE);
 	reset_next_victim();
 
-        splx(spl);
-
+	splx(spl);
 
 	#else
 	struct addrspace *as;
@@ -235,9 +233,6 @@ as_activate(void)
 	}
 
 	#endif /* OPT-A3 */
-	/*
-	 * Write this.
-	 */
 }
 
 void
@@ -276,24 +271,19 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	/*
 	 * Write this.
 	 */
-	        size_t npages; 
+	size_t npages; 
 
-        /* Align the region. First, the base... */
-        sz += vaddr & ~(vaddr_t)PAGE_FRAME;
-        vaddr &= PAGE_FRAME;
+	/* Align the region. First, the base... */
+	sz += vaddr & ~(vaddr_t)PAGE_FRAME;
+	vaddr &= PAGE_FRAME;
 
-        /* ...and now the length. */
-        sz = (sz + PAGE_SIZE - 1) & PAGE_FRAME;
+	/* ...and now the length. */
+	sz = (sz + PAGE_SIZE - 1) & PAGE_FRAME;
 
-        npages = sz / PAGE_SIZE;
+	npages = sz / PAGE_SIZE;
 
-        /* We don't use these - all pages are read-write */
-        (void)readable;
-        (void)writeable;
-        (void)executable;
-
-        if (as->as_vbase1 == 0) {
-                as->as_vbase1 = vaddr;
+	if (as->as_vbase1 == 0) {
+		as->as_vbase1 = vaddr;
 
 		//malloc the space for the text segment page table
 		as->text_pt = kmalloc(sizeof(paddr_t) * (npages));
@@ -302,22 +292,22 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		for(size_t i = 0; i < npages; i++){
 			as->text_pt[i] = 0;
 			if(readable){
-				as->text_pt[i] = as->text_pt[i] | PT_READ;
+				as->text_pt[i] |= PT_READ;
 			}
 			if(writeable){
-				as->text_pt[i] = as->text_pt[i] | PT_WRITE;
+				as->text_pt[i] |= PT_WRITE;
 			}
 			if(executable){
-				as->text_pt[i] = as->text_pt[i] | PT_EXE;
+				as->text_pt[i] |= PT_EXE;
 			}
 		}
 
-//                as->as_npages1 = npages;
-                return 0;
-        }
+		//as->as_npages1 = npages;
+		return 0;
+	}
 
-        if (as->as_vbase2 == 0) {
-                as->as_vbase2 = vaddr;
+	if (as->as_vbase2 == 0) {
+		as->as_vbase2 = vaddr;
 
 		//malloc the space for the data segment page table
 		as->data_pt = kmalloc(sizeof(paddr_t) * (npages));
@@ -326,25 +316,25 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		for(size_t i = 0; i < npages; i++){
 			as->data_pt[i] = 0;
 			if(readable){
-				as->data_pt[i] = as->data_pt[i] | PT_READ;
+				as->data_pt[i] |= PT_READ;
 			}
 			if(writeable){
-				as->data_pt[i] = as->data_pt[i] | PT_WRITE;
+				as->data_pt[i] |= PT_WRITE;
 			}
 			if(executable){
-				as->data_pt[i] = as->data_pt[i] | PT_EXE;
+				as->data_pt[i] |= PT_EXE;
 			}
 		}
 
-//                as->as_npages2 = npages;
-                return 0;
-        }
+		//as->as_npages2 = npages;
+		return 0;
+	}
 
-        /*
-         * Support for more than two regions is not available.
-         */
-        kprintf("dumbvm: Warning: too many regions\n");
-        return EUNIMP;
+	/*
+	 * Support for more than two regions is not available.
+	 */
+	kprintf("dumbvm: Warning: too many regions\n");
+	return EUNIMP;
 
 	#else
 	(void)as;
@@ -384,13 +374,9 @@ as_prepare_load(struct addrspace *as)
         if (as->as_stackpbase == 0) {
                 return ENOMEM;
         }
-*/        
-        as_zero_region(as->as_stackpbase, DUMBVM_STACKPAGES);
-
-
-
-
-        return 0;
+*/
+	as_zero_region(as->as_stackpbase, DUMBVM_STACKPAGES);
+	return 0;
 
 	#else
 	(void)as;
@@ -407,8 +393,8 @@ as_complete_load(struct addrspace *as)
 	 * Write this.
 	 */
 
-        (void)as;
-        return 0;
+	(void)as;
+	return 0;
 
 	#else
 	(void)as;
@@ -420,13 +406,12 @@ int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
 	#if OPT_A3
-	/*
-	 * Write this.
-	 */
-        KASSERT(as->as_stackpbase != 0);
+	// TODO: Do we need to load a stack page right away?
+	as->stack_pt = kmalloc(DUMBVM_STACKPAGES * sizeof(paddr_t));
+	KASSERT(as->as_stackpbase != 0);
 
-        *stackptr = USERSTACK;
-        return 0;
+	*stackptr = USERSTACK;
+	return 0;
 
 
 	#else
