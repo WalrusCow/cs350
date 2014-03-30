@@ -9,6 +9,9 @@
 #include <proc.h>
 #include <kern/errno.h>
 #include <current.h>
+#include <uio.h>
+#include <vnode.h>
+
 
 /*
  * get the corresponding physical address by passing in a virtual address
@@ -32,8 +35,8 @@ pt_getEntry(vaddr_t vaddr, paddr_t* paddr, int* segment_type){
 		return EFAULT;
 	}
 
-	vaddr vbase;
-	paddr_t* pageTable = pt_getTable(vaddr, as, &segment_type, &vbase);
+	vaddr_t vbase;
+	paddr_t* pageTable = pt_getTable(vaddr, as, segment_type, &vbase);
 
 	if (pageTable == NULL) {
 		return EFAULT;
@@ -83,22 +86,20 @@ pt_setEntry(vaddr_t vaddr, paddr_t paddr){
 	// Keep all old flags (they are initialized at start)
 	paddr |= pageTable[index] & ~PAGE_FRAME;
 	pageTable[index] = paddr;
+	return 0;
 
 }
 
 /* use VOP_READ to load a page
 */
-int pt_loadPage(vaddr_t vaddr, paddr_t* paddr, struct addrspace *as, int segment_type){
-
+int 
+pt_loadPage(vaddr_t vaddr, struct addrspace *as, int segment_type){
 	off_t vnode_page_offset;
 	size_t readsize = PAGE_SIZE;
+	
 	switch(segment_type){
 		case 2:
-			// stack
-			// If a stack page is not found yet, then all we need
-			// to do is find a free physical page, zero the area
-			// and return the proper address
-			// get page, then zero region
+			// does nothing for stack
 			return 0;
 		case 0:
 			vnode_page_offset = vaddr - as->as_vbase1 +  as->as_vbase1_offset;
@@ -120,9 +121,6 @@ int pt_loadPage(vaddr_t vaddr, paddr_t* paddr, struct addrspace *as, int segment
 	struct uio u;
 	int result;
 
-	DEBUG(DB_EXEC, "ELF: Loading %lu bytes to 0x%lx\n",
-	      (unsigned long) filesize, (unsigned long) vaddr);
-
 	iov.iov_ubase = (userptr_t)vaddr; // start of vaddrs
 	iov.iov_len = PAGE_SIZE;		 // length of the memory space
 
@@ -135,7 +133,7 @@ int pt_loadPage(vaddr_t vaddr, paddr_t* paddr, struct addrspace *as, int segment
 	u.uio_rw = UIO_READ;
 	u.uio_space = as;
 
-	result = VOP_READ(v, &u);
+	result = VOP_READ(as->as_vn, &u);
 	if (result) {
 		return result;
 	}

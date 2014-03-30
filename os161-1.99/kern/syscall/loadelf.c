@@ -103,15 +103,16 @@ prepare_page(struct addrspace *as, struct vnode *v,
 	(void) vaddr; // already saved as vbase1 or vbase2
 
 	// memsize is used to calculate npages
-
-	if(as->as_vbase1_vnode == NULL){
-		as->as_vbase1_vnode = v;
+	if(as->as_vn == NULL){
+		as->as_vn = v;
+	}
+	
+	if(as->as_vbase1_filesize == 0){
 		as->as_vbase1_offset = offset;
 		as->as_vbase1_filesize = filesize;
 		return 0;
 	}
-	if(as->as_vbase2_vnode == NULL){
-		as->as_vbase2_vnode = v;
+	if(as->as_vbase2_filesize == 0){
 		as->as_vbase2_offset = offset;
 		as->as_vbase2_filesize =filesize;
 		return 0;

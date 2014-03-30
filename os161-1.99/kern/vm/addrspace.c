@@ -44,8 +44,8 @@
 #include <mips/tlb.h>
 #include <uw-vmstats.h>
 #include <pt.h>
+#include <vfs.h>
 
-static
 void
 as_zero_region(paddr_t paddr, unsigned npages)
 {
@@ -83,7 +83,13 @@ as_create(void)
 	as->stack_pt = NULL;
 
 	//vnode
-	as->as_vn = 0;
+	as->as_vn = NULL;
+	
+	as->as_vbase1_offset = 0;
+	as->as_vbase2_offset = 0;
+	
+	as->as_vbase1_filesize = 0;
+	as->as_vbase2_filesize = 0;
 
 	return as;
 
@@ -180,6 +186,7 @@ as_destroy(struct addrspace *as)
 {
 
 	#if OPT_A3
+	vfs_close(as->as_vn); // no more load elf
 
 	kfree(as->text_pt);
 	kfree(as->data_pt);
@@ -375,7 +382,7 @@ as_prepare_load(struct addrspace *as)
                 return ENOMEM;
         }
 */
-	as_zero_region(as->as_stackpbase, DUMBVM_STACKPAGES);
+	//as_zero_region(as->as_stackpbase, DUMBVM_STACKPAGES);
 	return 0;
 
 	#else

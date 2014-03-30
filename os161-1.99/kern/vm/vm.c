@@ -141,7 +141,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
         vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
         paddr_t paddr;
-        int i;
+
         uint32_t ehi, elo;
         struct addrspace *as;
         int spl;
@@ -205,85 +205,79 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	 */
 
 	int segment_type;
+	int notInPt = 1;
 
 	// get the paddr
 	int result = pt_getEntry(faultaddress, &paddr, &segment_type);
 
 	if(result) return result;
 
-	if(paddr & PT_VALID == 0){
+	if((paddr & PT_VALID) == 0){
 		// Not loaded in page table yet - load it up
-		result = pt_loadPage(faultaddress, &paddr, as, segment_type);
+		paddr = getppages(1); // new ppage
+		as_zero_region(paddr, 1);
+		
+		result = pt_setEntry(faultaddress,paddr);
 		// pass in as, since now it does not have to be current address
 		// space because load page may take a will -> yield cpu to other
 		// process
-		if(result) return result;
+		notInPt = 0;
+		if(result) {
+			// free page
+			return result;
+		}
 	}
-/*
-        if (faultaddress >= vbase1 && faultaddress < vtop1) {
-                paddr = (faultaddress - vbase1) + as->as_pbase1;
-		segment_type = 0;
-        }
-        else if (faultaddress >= vbase2 && faultaddress < vtop2) {
-                paddr = (faultaddress - vbase2) + as->as_pbase2;
-		segment_type = 1;
-        }
-        else if (faultaddress >= stackbase && faultaddress < stacktop) {
-                paddr = (faultaddress - stackbase) + as->as_stackpbase;
-		segment_type = 2;
-        }
-        else {
-                return EFAULT;
-        }
-*/
-        /* make sure it's page-aligned */
-        KASSERT((paddr & PAGE_FRAME) == paddr);
+    /* make sure it's page-aligned */
+    KASSERT((paddr & PAGE_FRAME) == paddr);
 
-        /* Disable interrupts on this CPU while frobbing the TLB. */
-        spl = splhigh();
+    /* Disable interrupts on this CPU while frobbing the TLB. */
+    spl = splhigh();
 
 	vmstats_inc(VMSTAT_TLB_FAULT);
+	
+	int index = 0;
 
 	//if there exists free TLB entry
-        for (i=0; i<NUM_TLB; i++) {
-                tlb_read(&ehi, &elo, i);
-                if (elo & TLBLO_VALID) {
-                        continue;
-                }
+    for (; index<NUM_TLB; index++) {
+        tlb_read(&ehi, &elo, index);
+            if (elo & TLBLO_VALID) {
+                continue;
+            }
 		vmstats_inc(VMSTAT_TLB_FAULT_FREE);
-                ehi = faultaddress;
-//		if(segment_type == 0){
-//			elo = paddr | TLBLO_VALID | TLBLO_DIRTY;
-//		}
-//		else{
-	                elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
-//		}
-                DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, paddr);
-                tlb_write(ehi, elo, i);
-                splx(spl);
-                return 0;
-        }
-
-	//RR replacement in TLB
-	vmstats_inc(VMSTAT_TLB_FAULT_REPLACE);
-        int index = tlb_get_rr_victim();
         ehi = faultaddress;
-//	if(segment_type == 0){
-//		elo = paddr | TLBLO_VALID | TLBLO_DIRTY;
-//	}
-//	else{
-	        elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
-//	}
+	    elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
         DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, paddr);
         tlb_write(ehi, elo, index);
         splx(spl);
-        return 0;
+	}
 
-/*
-        kprintf("dumbvm: Ran out of TLB entries - cannot handle page fault\n");
-        splx(spl);
-        return EFAULT;
-*/
+	if(index==NUM_TLB){
+		//RR replacement in TLB
+		vmstats_inc(VMSTAT_TLB_FAULT_REPLACE);
+		index = tlb_get_rr_victim();
+		ehi = faultaddress;
+
+		elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
+		DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, paddr);
+		tlb_write(ehi, elo, index);
+		splx(spl);
+    }
+	
+	if(notInPt){
+		// this will access tlb (doing a tlb write)
+		result = pt_loadPage(faultaddress, as, segment_type);
+		
+		if(result){
+			//free 
+			return result;
+		}
+		if(segment_type== 0){
+			elo &= ~TLBLO_DIRTY;
+			tlb_write(ehi,elo,index);
+		}
+	}
+	return 0;
+
 	#else
   /* Adapt code form dumbvm or implement something new */
 	(void)faulttype;
