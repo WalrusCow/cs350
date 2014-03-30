@@ -162,14 +162,19 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	if(result) return result;
 
+	bool page_written;
+
 	if((paddr & PT_VALID) == 0){
 		newPage = true;
 		// Not loaded in page table yet - load it up
 		paddr = getppages(1); // new physical page
 		as_zero_region(paddr, 1);
 
+		// Only a new text page is not written
+		page_written = !(newPage && segment_type == 0);
+
 		// Update page table with this vaddr
-		result = pt_setEntry(faultaddress, paddr);
+		result = pt_setEntry(faultaddress, paddr, page_written);
 		// pass in as, since now it does not have to be current address
 		// space because load page may take a will -> yield cpu to other
 		// process
@@ -179,6 +184,9 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		}
 	}
 	else {
+		// Keep track of previous
+		page_written = paddr & PT_WRITTEN;
+
 		// Get the actual *address* and ignore the flags from page table
 		paddr &= PAGE_FRAME;
 	}
@@ -191,12 +199,11 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	uint32_t tlb_hi, tlb_lo;
 	tlb_hi = faultaddress;
 	tlb_lo = paddr | TLBLO_VALID;
-	if (newPage || segment_type != 0) {
-		// Writable if new page or not text segment
+	if (newPage || segment_type != 0 || !page_written) {
+		// Writable if new page or not text segment or not yet written page
 		tlb_lo |= TLBLO_DIRTY;
 	}
 
-	/* Disable interrupts on this CPU while frobbing the TLB. */
 	// Insert into the tlb (choose the index for us)
 	int index = tlb_insert(tlb_hi, tlb_lo);
 
@@ -210,8 +217,14 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		}
 
 		// Text segment was writable to load ELF. Fix that.
-		if(segment_type == 0) {
+		if (segment_type == 0) {
+			// Update the page table with the new non-written flag
 			int spl = splhigh();
+
+			// Remove the written flag from the page table
+			// because we have now written the page
+			pt_setEntry(faultaddress, paddr, true);
+
 			// Disable interrupts while using TLB
 			tlb_lo &= ~TLBLO_DIRTY;
 			tlb_write(tlb_hi, tlb_lo, index);

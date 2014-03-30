@@ -256,10 +256,13 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 {
 
 	#if OPT_A3
-	/*
-	 * Write this.
-	 */
-	size_t npages; 
+	size_t npages;
+
+	// Set up the flags that we will be using
+	int flags = 0;
+	if (readable) flags |= PT_READ;
+	if (writeable) flags |= PT_WRITE;
+	if (executable) flags |= PT_EXE;
 
 	/* Align the region. First, the base... */
 	sz += vaddr & ~(vaddr_t)PAGE_FRAME;
@@ -278,16 +281,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 
 		//initialize the page table
 		for(size_t i = 0; i < npages; i++){
-			as->text_pt[i] = 0;
-			if(readable){
-				as->text_pt[i] |= PT_READ;
-			}
-			if(writeable){
-				as->text_pt[i] |= PT_WRITE;
-			}
-			if(executable){
-				as->text_pt[i] |= PT_EXE;
-			}
+			as->text_pt[i] = flags;
 		}
 
 		as->as_npages1 = npages;
@@ -302,16 +296,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 
 		//initialize the page table
 		for(size_t i = 0; i < npages; i++){
-			as->data_pt[i] = 0;
-			if(readable){
-				as->data_pt[i] |= PT_READ;
-			}
-			if(writeable){
-				as->data_pt[i] |= PT_WRITE;
-			}
-			if(executable){
-				as->data_pt[i] |= PT_EXE;
-			}
+			as->data_pt[i] = flags;
 		}
 
 		as->as_npages2 = npages;

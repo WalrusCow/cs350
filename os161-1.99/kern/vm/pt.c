@@ -54,10 +54,10 @@ pt_getEntry(vaddr_t vaddr, paddr_t* paddr, int* segment_type){
  */
 
 int
-pt_setEntry(vaddr_t vaddr, paddr_t paddr){
+pt_setEntry(vaddr_t vaddr, paddr_t paddr, bool written){
 	struct addrspace *as;
 
-	//we only care the page number and frame number
+	// we only care the page number and frame number
 	vaddr &= PAGE_FRAME;
 	paddr &= PAGE_FRAME;
 
@@ -72,6 +72,7 @@ pt_setEntry(vaddr_t vaddr, paddr_t paddr){
 
 	//allocate the physical address for a page, this page is valid
 	paddr |= PT_VALID;
+	if (written) paddr |= PT_WRITTEN;
 
 	vaddr_t base_vaddr;
 	int segType;
@@ -94,31 +95,38 @@ pt_setEntry(vaddr_t vaddr, paddr_t paddr){
 */
 int
 pt_loadPage(vaddr_t vaddr, struct addrspace *as, int segment_type){
-	off_t vnode_page_offset;
-	size_t readsize = PAGE_SIZE;
+	// Size to read
+	size_t readsize;
+	// Number of bytes left in the segment
+	size_t bytes_left;
+	// Offset into the file
+	size_t file_offset;
+	// Offset into the segment
+	size_t seg_offset;
 
 	switch(segment_type){
 		case 2:
 			// does nothing for stack
 			vmstats_inc(VMSTAT_PAGE_FAULT_ZERO);
 			return 0;
-		// calculate offset
+			// TODO: segment data structure
 		case 0: // Text
-			vnode_page_offset = vaddr - as->as_vbase1 +  as->as_vbase1_offset;
-			if(vnode_page_offset + PAGE_SIZE > as->as_vbase1_filesize){
-				readsize = as->as_vbase1_filesize - vnode_page_offset;
-			}
+			seg_offset = vaddr - as->as_vbase1;
+			file_offset = seg_offset + as->as_vbase1_offset;
+			bytes_left = (as->as_vbase1_filesize - seg_offset);
 			break;
 		case 1: // Data
-			vnode_page_offset = vaddr - as->as_vbase2 + as->as_vbase2_offset;
-			if(vnode_page_offset + PAGE_SIZE > as->as_vbase2_filesize){
-				readsize = as->as_vbase2_filesize - vnode_page_offset;
-			}
+			seg_offset = vaddr - as->as_vbase2;
+			file_offset = seg_offset + as->as_vbase2_offset;
+			bytes_left = (as->as_vbase2_filesize - seg_offset);
 			break;
 		default:
 			// Unknown segment type
 			return 1;
 	}
+
+	// We want to read the minimum of remaining bytes and the size of a page
+	readsize = (bytes_left < PAGE_SIZE) ? bytes_left : PAGE_SIZE;
 
 	vmstats_inc(VMSTAT_PAGE_FAULT_DISK);
 	vmstats_inc(VMSTAT_ELF_FILE_READ);
@@ -133,7 +141,7 @@ pt_loadPage(vaddr_t vaddr, struct addrspace *as, int segment_type){
 	u.uio_iov = &iov;
 	u.uio_iovcnt = 1;
 	u.uio_resid = readsize;          // amount to read from the file
-	u.uio_offset = vnode_page_offset;
+	u.uio_offset = file_offset; // Offset into the file to begin reading at
 	// Only executable if in text segment
 	u.uio_segflg = segment_type ? UIO_USERSPACE : UIO_USERISPACE;
 	u.uio_rw = UIO_READ;
