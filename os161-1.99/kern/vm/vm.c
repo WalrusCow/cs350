@@ -185,6 +185,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	}
 	else {
 		// Keep track of previous
+		vmstats_inc(VMSTAT_TLB_RELOAD);
 		page_written = paddr & PT_WRITTEN;
 
 		// Get the actual *address* and ignore the flags from page table
