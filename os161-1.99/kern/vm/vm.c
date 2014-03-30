@@ -116,9 +116,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	paddr_t paddr;
 
-	uint32_t ehi, elo;
 	struct addrspace *as;
-	int spl;
 
 	faultaddress &= PAGE_FRAME;
 
@@ -156,7 +154,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	}
 
 	int segment_type;
-	bool notInPt = true; // True if vaddr not in page table
+	// True if the page is a new one (wasn't in page table)
+	bool newPage = false;
 
 	// get the paddr
 	int result = pt_getEntry(faultaddress, &paddr, &segment_type);
@@ -164,9 +163,10 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	if(result) return result;
 
 	if((paddr & PT_VALID) == 0){
+		newPage = true;
 		// Not loaded in page table yet - load it up
 		paddr = getppages(1); // new physical page
-		as_zero_region(paddr, 1); // Zero the page, because that's good
+		as_zero_region(paddr, 1);
 
 		// Update page table with this vaddr
 		result = pt_setEntry(faultaddress, paddr);
@@ -177,75 +177,46 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			// free page ?
 			return result;
 		}
-		// We just updated the page table to have this vaddr
-		notInPt = false;
-
-		/* make sure it's page-aligned */
-		KASSERT((paddr & PAGE_FRAME) == paddr);
 	}
 	else {
 		// Get the actual *address* and ignore the flags from page table
 		paddr &= PAGE_FRAME;
 	}
 
-	/* Disable interrupts on this CPU while frobbing the TLB. */
-	spl = splhigh();
+	// Must be page aligned
+	KASSERT((paddr & PAGE_FRAME) == paddr);
 
 	vmstats_inc(VMSTAT_TLB_FAULT);
 
-	int index = 0;
-
-	//if there exists free TLB entry
-	for (; index < NUM_TLB; index++) {
-		tlb_read(&ehi, &elo, index);
-		if (elo & TLBLO_VALID) {
-			continue;
-		}
-		// Current TLB entry is invalid (free for us to take)
-		vmstats_inc(VMSTAT_TLB_FAULT_FREE);
-		ehi = faultaddress;
-
-		if (!notInPt && segment_type == 0) {
-			// If we found in the page table and it's text segment then
-			// it's not writable (we have already written)
-			elo = paddr | TLBLO_VALID;
-		}
-		else {
-			elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
-		}
-
-		DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, paddr);
-		tlb_write(ehi, elo, index);
-		splx(spl);
-		break;
+	uint32_t tlb_hi, tlb_lo;
+	tlb_hi = faultaddress;
+	tlb_lo = paddr | TLBLO_VALID;
+	if (newPage || segment_type != 0) {
+		// Writable if new page or not text segment
+		tlb_lo |= TLBLO_DIRTY;
 	}
 
-	// We went through the whole TLB without finding the vaddr
-	if(index == NUM_TLB){
-		// RR replacement in TLB
-		vmstats_inc(VMSTAT_TLB_FAULT_REPLACE);
-		index = tlb_get_rr_victim();
-		ehi = faultaddress;
+	/* Disable interrupts on this CPU while frobbing the TLB. */
+	// Insert into the tlb (choose the index for us)
+	int index = tlb_insert(tlb_hi, tlb_lo);
 
-		elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
-		DEBUG(DB_VM, "dumbvm: 0x%x -> 0x%x\n", faultaddress, paddr);
-		tlb_write(ehi, elo, index);
-		splx(spl);
-	}
-
-	if(notInPt){
-		// Load the page into memory
+	if (newPage) {
+		// Load the page into memory - it is a new page
 		result = pt_loadPage(faultaddress, as, segment_type);
 
-		if(result){
-			// free ?
+		if (result) {
+			// Invalidate TLB and page table entries?
 			return result;
 		}
 
 		// Text segment was writable to load ELF. Fix that.
-		if(segment_type == 0){
-			elo &= ~TLBLO_DIRTY;
-			tlb_write(ehi, elo, index);
+		if(segment_type == 0) {
+			int spl = splhigh();
+			// Disable interrupts while using TLB
+			tlb_lo &= ~TLBLO_DIRTY;
+			tlb_write(tlb_hi, tlb_lo, index);
+			splx(spl);
+			return 0;
 		}
 	}
 	return 0;
@@ -256,9 +227,47 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	(void)faultaddress;
 	panic("Not implemented yet.\n");
 	return 0;
-	#endif /* OPT-A3 */
+	#endif /* OPT_A3 */
 
 }
+
+#if OPT_A3
+/*
+ * tlb_insert just inserts a hi and lo entry into the TLB.
+ * It chooses the index appropriately (invalid space if one exists,
+ * does replacement otherwise
+ */
+int
+tlb_insert(uint32_t tlb_hi, uint32_t tlb_lo) {
+	uint32_t ehi, elo;
+	int index;
+	// No interrupts while messing with TLB
+	int spl = splhigh();
+
+	//if there exists free TLB entry
+	for (index = 0; index < NUM_TLB; index++) {
+		tlb_read(&ehi, &elo, index);
+		if (elo & TLBLO_VALID) {
+			continue;
+		}
+		// Current TLB entry is invalid (free for us to take)
+		vmstats_inc(VMSTAT_TLB_FAULT_FREE);
+
+		tlb_write(tlb_hi, tlb_lo, index);
+		splx(spl);
+		return index;
+	}
+
+	// RR replacement in TLB
+	vmstats_inc(VMSTAT_TLB_FAULT_REPLACE);
+	index = tlb_get_rr_victim();
+
+	tlb_write(tlb_hi, tlb_lo, index);
+	splx(spl);
+	return index;
+}
+#endif /* OPT_A3 */
+
 #endif /* OPT_VM */
 
 #endif /* UW */

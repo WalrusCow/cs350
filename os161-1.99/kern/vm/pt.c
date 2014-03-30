@@ -11,7 +11,7 @@
 #include <current.h>
 #include <uio.h>
 #include <vnode.h>
-
+#include <uw-vmstats.h>
 
 /*
  * get the corresponding physical address by passing in a virtual address
@@ -100,6 +100,7 @@ pt_loadPage(vaddr_t vaddr, struct addrspace *as, int segment_type){
 	switch(segment_type){
 		case 2:
 			// does nothing for stack
+			vmstats_inc(VMSTAT_PAGE_FAULT_ZERO);
 			return 0;
 		// calculate offset
 		case 0: // Text
@@ -118,6 +119,9 @@ pt_loadPage(vaddr_t vaddr, struct addrspace *as, int segment_type){
 			// Unknown segment type
 			return 1;
 	}
+
+	vmstats_inc(VMSTAT_PAGE_FAULT_DISK);
+	vmstats_inc(VMSTAT_ELF_FILE_READ);
 
 	struct iovec iov;
 	struct uio u;

@@ -51,6 +51,8 @@ getppages(unsigned long npages);
 
 void reset_next_victim(void);
 
+int tlb_insert(uint32_t tlb_hi, uint32_t tlb_lo);
+
 #endif /* OPT_A3 */
 
 /* Initialization function */
@@ -66,6 +68,5 @@ void free_kpages(vaddr_t addr);
 /* TLB shootdown handling called from interprocessor_interrupt */
 void vm_tlbshootdown_all(void);
 void vm_tlbshootdown(const struct tlbshootdown *);
-
 
 #endif /* _VM_H_ */
