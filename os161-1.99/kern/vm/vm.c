@@ -219,13 +219,15 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		// Text segment was writable to load ELF. Fix that.
 		if (segment_type == 0) {
 			// Update the page table with the new non-written flag
+			// No interrupts while TLB-ing
 			int spl = splhigh();
 
 			// Remove the written flag from the page table
 			// because we have now written the page
 			pt_setEntry(faultaddress, paddr, true);
 
-			// Disable interrupts while using TLB
+			// Find index of the vaddr thing
+			index = tlb_probe(tlb_hi, 0);
 			tlb_lo &= ~TLBLO_DIRTY;
 			tlb_write(tlb_hi, tlb_lo, index);
 			splx(spl);
