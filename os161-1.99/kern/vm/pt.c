@@ -92,29 +92,31 @@ pt_setEntry(vaddr_t vaddr, paddr_t paddr){
 
 /* use VOP_READ to load a page
 */
-int 
+int
 pt_loadPage(vaddr_t vaddr, struct addrspace *as, int segment_type){
 	off_t vnode_page_offset;
 	size_t readsize = PAGE_SIZE;
-	
+
 	switch(segment_type){
 		case 2:
 			// does nothing for stack
 			return 0;
-		case 0:
+		// calculate offset
+		case 0: // Text
 			vnode_page_offset = vaddr - as->as_vbase1 +  as->as_vbase1_offset;
 			if(vnode_page_offset + PAGE_SIZE > as->as_vbase1_filesize){
 				readsize = as->as_vbase1_filesize - vnode_page_offset;
 			}
 			break;
-		case 1:
+		case 1: // Data
 			vnode_page_offset = vaddr - as->as_vbase2 + as->as_vbase2_offset;
 			if(vnode_page_offset + PAGE_SIZE > as->as_vbase2_filesize){
 				readsize = as->as_vbase2_filesize - vnode_page_offset;
 			}
 			break;
-			// text or data
-			// calculate offset
+		default:
+			// Unknown segment type
+			return 1;
 	}
 
 	struct iovec iov;

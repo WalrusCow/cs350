@@ -205,6 +205,9 @@ lock_acquire(struct lock *lock)
 #if OPT_A1
 	KASSERT(lock);
 	// Don't wait on own lock!
+	if (curthread == lock->owner) {
+		kprintf("uhoh\n");
+	}
 	KASSERT(curthread != lock->owner);
 
 	spinlock_acquire(&lock->lk_spinlock);
