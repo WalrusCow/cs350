@@ -33,7 +33,7 @@ getppages(unsigned long npages)
         spinlock_acquire(&stealmem_lock);
 
         addr = ram_stealmem(npages);
-        
+
         spinlock_release(&stealmem_lock);
         return addr;
 }
@@ -206,14 +206,14 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	int segment_type;
 
-	//get the paddr
+	// get the paddr
 	int result = pt_getEntry(faultaddress, &paddr, &segment_type);
-	
+
 	if(result) return result;
 
-	if(paddr|PT_VALID != paddr){
-		// not in paddr
-		int result = pt_loadPage(faultaddress, &paddr, as,segment_type);
+	if(paddr & PT_VALID == 0){
+		// Not loaded in page table yet - load it up
+		result = pt_loadPage(faultaddress, &paddr, as, segment_type);
 		// pass in as, since now it does not have to be current address
 		// space because load page may take a will -> yield cpu to other
 		// process

@@ -77,11 +77,11 @@ struct addrspace {
 	// offset for vnode, beginning
 	off_t as_vbase1_offset;
 	off_t as_vbase2_offset;
-	
+
 	// offset for vnode, end
 	size_t as_vbase1_filesize;
 	size_t as_vbase2_filesize;
-	
+
 	//vnode for load pages
 	struct vnode * as_vbase1_vnode;
 	struct vnode * as_vbase2_vnode;

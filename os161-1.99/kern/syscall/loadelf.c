@@ -79,10 +79,10 @@
  * change this code to not use uiomove, be sure to check for this case
  * explicitly.
  */
- 
+
  //VADDR+PAGESIZE
  //FILE SIZE-> ACTUAL SIZE READ
- 
+
 #if OPT_A3
 /*
 save the vnode and offset and filesize for pagetable 1 and 2
@@ -91,19 +91,19 @@ because we need those for page fault later
 static
 int
 prepare_page(struct addrspace *as, struct vnode *v,
-	     off_t offset, vaddr_t vaddr, 
-	     size_t memsize, size_t filesize,
-	     int is_executable){
-		 
+	     off_t offset, vaddr_t vaddr,
+	     size_t memsize, size_t filesize/*,
+	     int is_executable*/){
+
 	if (filesize > memsize) {
 		kprintf("ELF: warning: segment filesize > segment memsize\n");
 		filesize = memsize;
 	}
 
 	(void) vaddr; // already saved as vbase1 or vbase2
-	
+
 	// memsize is used to calculate npages
-	
+
 	if(as->as_vbase1_vnode == NULL){
 		as->as_vbase1_vnode = v;
 		as->as_vbase1_offset = offset;
@@ -116,86 +116,86 @@ prepare_page(struct addrspace *as, struct vnode *v,
 		as->as_vbase2_filesize =filesize;
 		return 0;
 	}
-	
+
 	/*
 	 * Support for more than two regions is not available.
 	 */
 	kprintf("dumbvm: Warning: too many regions\n");
 	return EUNIMP;
 }
- #endif
- 
- 
-static
-int
-load_segment(struct addrspace *as, struct vnode *v,
-	     off_t offset, vaddr_t vaddr, 
-	     size_t memsize, size_t filesize,
-	     int is_executable)
-{
-	struct iovec iov;
-	struct uio u;
-	int result;
-
-	if (filesize > memsize) {
-		kprintf("ELF: warning: segment filesize > segment memsize\n");
-		filesize = memsize;
-	}
-
-	DEBUG(DB_EXEC, "ELF: Loading %lu bytes to 0x%lx\n", 
-	      (unsigned long) filesize, (unsigned long) vaddr);
-
-	iov.iov_ubase = (userptr_t)vaddr;
-	iov.iov_len = memsize;		 // length of the memory space
-	u.uio_iov = &iov;
-	u.uio_iovcnt = 1;
-	u.uio_resid = filesize;          // amount to read from the file
-	u.uio_offset = offset;
-	u.uio_segflg = is_executable ? UIO_USERISPACE : UIO_USERSPACE;
-	u.uio_rw = UIO_READ;
-	u.uio_space = as;
-
-	result = VOP_READ(v, &u);
-	if (result) {
-		return result;
-	}
-
-	if (u.uio_resid != 0) {
-		/* short read; problem with executable? */
-		kprintf("ELF: short read on segment - file truncated?\n");
-		return ENOEXEC;
-	}
-
-	/*
-	 * If memsize > filesize, the remaining space should be
-	 * zero-filled. There is no need to do this explicitly,
-	 * because the VM system should provide pages that do not
-	 * contain other processes' data, i.e., are already zeroed.
-	 *
-	 * During development of your VM system, it may have bugs that
-	 * cause it to (maybe only sometimes) not provide zero-filled
-	 * pages, which can cause user programs to fail in strange
-	 * ways. Explicitly zeroing program BSS may help identify such
-	 * bugs, so the following disabled code is provided as a
-	 * diagnostic tool. Note that it must be disabled again before
-	 * you submit your code for grading.
-	 */
-#if 0
-	{
-		size_t fillamt;
-
-		fillamt = memsize - filesize;
-		if (fillamt > 0) {
-			DEBUG(DB_EXEC, "ELF: Zero-filling %lu more bytes\n", 
-			      (unsigned long) fillamt);
-			u.uio_resid += fillamt;
-			result = uiomovezeros(fillamt, &u);
-		}
-	}
 #endif
-	
-	return result;
-}
+
+
+//static
+//int
+//load_segment(struct addrspace *as, struct vnode *v,
+//	     off_t offset, vaddr_t vaddr,
+//	     size_t memsize, size_t filesize,
+//	     int is_executable)
+//{
+//	struct iovec iov;
+//	struct uio u;
+//	int result;
+//
+//	if (filesize > memsize) {
+//		kprintf("ELF: warning: segment filesize > segment memsize\n");
+//		filesize = memsize;
+//	}
+//
+//	DEBUG(DB_EXEC, "ELF: Loading %lu bytes to 0x%lx\n", 
+//	      (unsigned long) filesize, (unsigned long) vaddr);
+//
+//	iov.iov_ubase = (userptr_t)vaddr;
+//	iov.iov_len = memsize;		 // length of the memory space
+//	u.uio_iov = &iov;
+//	u.uio_iovcnt = 1;
+//	u.uio_resid = filesize;          // amount to read from the file
+//	u.uio_offset = offset;
+//	u.uio_segflg = is_executable ? UIO_USERISPACE : UIO_USERSPACE;
+//	u.uio_rw = UIO_READ;
+//	u.uio_space = as;
+//
+//	result = VOP_READ(v, &u);
+//	if (result) {
+//		return result;
+//	}
+//
+//	if (u.uio_resid != 0) {
+//		/* short read; problem with executable? */
+//		kprintf("ELF: short read on segment - file truncated?\n");
+//		return ENOEXEC;
+//	}
+//
+//	/*
+//	 * If memsize > filesize, the remaining space should be
+//	 * zero-filled. There is no need to do this explicitly,
+//	 * because the VM system should provide pages that do not
+//	 * contain other processes' data, i.e., are already zeroed.
+//	 *
+//	 * During development of your VM system, it may have bugs that
+//	 * cause it to (maybe only sometimes) not provide zero-filled
+//	 * pages, which can cause user programs to fail in strange
+//	 * ways. Explicitly zeroing program BSS may help identify such
+//	 * bugs, so the following disabled code is provided as a
+//	 * diagnostic tool. Note that it must be disabled again before
+//	 * you submit your code for grading.
+//	 */
+//#if 0
+//	{
+//		size_t fillamt;
+//
+//		fillamt = memsize - filesize;
+//		if (fillamt > 0) {
+//			DEBUG(DB_EXEC, "ELF: Zero-filling %lu more bytes\n", 
+//			      (unsigned long) fillamt);
+//			u.uio_resid += fillamt;
+//			result = uiomovezeros(fillamt, &u);
+//		}
+//	}
+//#endif
+//	
+//	return result;
+//}
 
 /*
  * Load an ELF executable user program into the current address space.
@@ -342,12 +342,12 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 				ph.p_type);
 			return ENOEXEC;
 		}
-		
+
 		// assume for now that vnode will remain open until we exit
 		// originally load segment
 		result = prepare_page(as, v, ph.p_offset, ph.p_vaddr, 
-				      ph.p_memsz, ph.p_filesz,
-				      ph.p_flags & PF_X); // pf_x is set when we initalize pt
+				      ph.p_memsz, ph.p_filesz/*,
+				      ph.p_flags & PF_X*/); // pf_x is set when we initalize pt
 		if (result) {
 			return result;
 		}
