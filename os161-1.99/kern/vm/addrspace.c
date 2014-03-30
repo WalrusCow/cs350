@@ -75,7 +75,6 @@ as_create(void)
 	as->as_npages1 = 0;
 	as->as_vbase2 = 0;
 	as->as_npages2 = 0;
-	as->as_stackpbase = 0;
 
 	//page table
 	as->text_pt = NULL;
@@ -132,12 +131,6 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		return ENOMEM;
 	}
 
-	//KASSERT(new->as_pbase1 != 0);
-	//KASSERT(new->as_pbase2 != 0);
-
-
-	KASSERT(new->as_stackpbase != 0);
-
 	//copy the vnode and page table in the address space
 	// TODO: increment references
 	new->as_vn = old->as_vn;
@@ -147,18 +140,6 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 
 	//Do the deep copy? what about stack? use memmove?
 
-//        memmove((void *)PADDR_TO_KVADDR(new->as_pbase1),
-//                (const void *)PADDR_TO_KVADDR(old->as_pbase1),
-//                old->as_npages1*PAGE_SIZE);
-
-//        memmove((void *)PADDR_TO_KVADDR(new->as_pbase2),
-//                (const void *)PADDR_TO_KVADDR(old->as_pbase2),
-//                old->as_npages2*PAGE_SIZE);
-
-//        memmove((void *)PADDR_TO_KVADDR(new->as_stackpbase),
-//                (const void *)PADDR_TO_KVADDR(old->as_stackpbase),
-//                DUMBVM_STACKPAGES*PAGE_SIZE);
-        
 	*ret = new;
 	return 0;
 
@@ -309,7 +290,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 			}
 		}
 
-		//as->as_npages1 = npages;
+		as->as_npages1 = npages;
 		return 0;
 	}
 
@@ -333,7 +314,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 			}
 		}
 
-		//as->as_npages2 = npages;
+		as->as_npages2 = npages;
 		return 0;
 	}
 
@@ -363,26 +344,6 @@ as_prepare_load(struct addrspace *as)
 	/*
 	 * Write this.
 	 */
-/*        KASSERT(as->as_pbase1 == 0);
-        KASSERT(as->as_pbase2 == 0);
-        KASSERT(as->as_stackpbase == 0);
-
-        as->as_pbase1 = getppages(as->as_npages1);
-        if (as->as_pbase1 == 0) {
-                return ENOMEM;
-        }
-
-        as->as_pbase2 = getppages(as->as_npages2);
-        if (as->as_pbase2 == 0) {
-                return ENOMEM;
-        }
-
-        as->as_stackpbase = getppages(DUMBVM_STACKPAGES);
-        if (as->as_stackpbase == 0) {
-                return ENOMEM;
-        }
-*/
-	//as_zero_region(as->as_stackpbase, DUMBVM_STACKPAGES);
 	return 0;
 
 	#else
@@ -415,7 +376,6 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	#if OPT_A3
 	// TODO: Do we need to load a stack page right away?
 	as->stack_pt = kmalloc(DUMBVM_STACKPAGES * sizeof(paddr_t));
-	KASSERT(as->as_stackpbase != 0);
 
 	*stackptr = USERSTACK;
 	return 0;

@@ -187,10 +187,8 @@ pt_getTable(vaddr_t vaddr, struct addrspace* as, int* segType, vaddr_t* vbase) {
 	KASSERT(as->as_npages1 != 0);
 	KASSERT(as->as_vbase2 != 0);
 	KASSERT(as->as_npages2 != 0);
-	KASSERT(as->as_stackpbase != 0);
 	KASSERT((as->as_vbase1 & PAGE_FRAME) == as->as_vbase1);
 	KASSERT((as->as_vbase2 & PAGE_FRAME) == as->as_vbase2);
-	KASSERT((as->as_stackpbase & PAGE_FRAME) == as->as_stackpbase);
 
 	KASSERT(segType); // Not NULL, please
 

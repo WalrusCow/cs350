@@ -64,7 +64,6 @@ struct addrspace {
         size_t as_npages1;
         vaddr_t as_vbase2;
         size_t as_npages2;
-        paddr_t as_stackpbase;
 
 	//page table for three segments
 	//text segment
