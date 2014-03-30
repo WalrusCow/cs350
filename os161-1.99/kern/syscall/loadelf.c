@@ -60,6 +60,11 @@
 #include <vnode.h>
 #include <elf.h>
 #include "opt-A3.h"
+
+#if OPT_A3
+
+#endif
+
 /*
  * Load a segment at virtual address VADDR. The segment in memory
  * extends from VADDR up to (but not including) VADDR+MEMSIZE. The
@@ -74,88 +79,51 @@
  * change this code to not use uiomove, be sure to check for this case
  * explicitly.
  */
+
+ //VADDR+PAGESIZE
+ //FILE SIZE-> ACTUAL SIZE READ
+
+#if OPT_A3
+/*
+save the vnode and offset and filesize for pagetable 1 and 2
+because we need those for page fault later
+*/
 static
 int
-load_segment(struct addrspace *as, struct vnode *v,
-	     off_t offset, vaddr_t vaddr, 
-	     size_t memsize, size_t filesize,
-	     int is_executable)
-{
-#if OPT_A3
-	(void)as;
-	(void)v;
-	(void)offset;
-	(void)vaddr;
-	(void)memsize;
-	(void)filesize;
-	(void)is_executable;
-
-	return 0;
-#else
-	struct iovec iov;
-	struct uio u;
-	int result;
+prepare_page(struct addrspace *as, struct vnode *v,
+	     off_t offset, vaddr_t vaddr,
+	     size_t memsize, size_t filesize) {
 
 	if (filesize > memsize) {
 		kprintf("ELF: warning: segment filesize > segment memsize\n");
 		filesize = memsize;
 	}
 
-	DEBUG(DB_EXEC, "ELF: Loading %lu bytes to 0x%lx\n", 
-	      (unsigned long) filesize, (unsigned long) vaddr);
+	(void) vaddr; // already saved as vbase1 or vbase2
 
-	iov.iov_ubase = (userptr_t)vaddr;
-	iov.iov_len = memsize;		 // length of the memory space
-	u.uio_iov = &iov;
-	u.uio_iovcnt = 1;
-	u.uio_resid = filesize;          // amount to read from the file
-	u.uio_offset = offset;
-	u.uio_segflg = is_executable ? UIO_USERISPACE : UIO_USERSPACE;
-	u.uio_rw = UIO_READ;
-	u.uio_space = as;
-
-	result = VOP_READ(v, &u);
-	if (result) {
-		return result;
+	// memsize is used to calculate npages
+	if(as->as_vn == NULL){
+		as->as_vn = v;
 	}
 
-	if (u.uio_resid != 0) {
-		/* short read; problem with executable? */
-		kprintf("ELF: short read on segment - file truncated?\n");
-		return ENOEXEC;
+	if(as->as_vbase1_filesize == 0){
+		as->as_vbase1_offset = offset;
+		as->as_vbase1_filesize = filesize;
+		return 0;
+	}
+	if(as->as_vbase2_filesize == 0){
+		as->as_vbase2_offset = offset;
+		as->as_vbase2_filesize =filesize;
+		return 0;
 	}
 
 	/*
-	 * If memsize > filesize, the remaining space should be
-	 * zero-filled. There is no need to do this explicitly,
-	 * because the VM system should provide pages that do not
-	 * contain other processes' data, i.e., are already zeroed.
-	 *
-	 * During development of your VM system, it may have bugs that
-	 * cause it to (maybe only sometimes) not provide zero-filled
-	 * pages, which can cause user programs to fail in strange
-	 * ways. Explicitly zeroing program BSS may help identify such
-	 * bugs, so the following disabled code is provided as a
-	 * diagnostic tool. Note that it must be disabled again before
-	 * you submit your code for grading.
+	 * Support for more than two regions is not available.
 	 */
-#if 0
-	{
-		size_t fillamt;
-
-		fillamt = memsize - filesize;
-		if (fillamt > 0) {
-			DEBUG(DB_EXEC, "ELF: Zero-filling %lu more bytes\n", 
-			      (unsigned long) fillamt);
-			u.uio_resid += fillamt;
-			result = uiomovezeros(fillamt, &u);
-		}
-	}
-#endif
-	
-	return result;
-#endif /* OPT-A3 */
+	kprintf("dumbvm: Warning: too many regions\n");
+	return EUNIMP;
 }
+#endif
 
 /*
  * Load an ELF executable user program into the current address space.
@@ -165,6 +133,8 @@ load_segment(struct addrspace *as, struct vnode *v,
 int
 load_elf(struct vnode *v, vaddr_t *entrypoint)
 {
+	// on stack, will be deallocated after;
+	
 	Elf_Ehdr eh;   /* Executable header */
 	Elf_Phdr ph;   /* "Program header" = segment header */
 	int result, i;
@@ -173,8 +143,6 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 	struct addrspace *as;
 
 	as = curproc_getas();
-
-	as->as_vn = v;
 
 	/*
 	 * Read the executable header from offset 0 in the file.
@@ -267,19 +235,16 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 		}
 	}
 
-	result = as_prepare_load(as);
+	result = as_prepare_load(as); // does nothing for now (use to do the job of page table, getppages ->physical address)
+	
 	if (result) {
 		return result;
 	}
 
 	/*
-	 * Now actually load each segment.
+	 * Save resources necessary for actual load later 
 	 */
-#if OPT_A3
-               result = load_segment(as, v, ph.p_offset, ph.p_vaddr, 
-                                      ph.p_memsz, ph.p_filesz,
-                                      ph.p_flags & PF_X);
-#else
+	 
 	for (i=0; i<eh.e_phnum; i++) {
 		off_t offset = eh.e_phoff + i*eh.e_phentsize;
 		uio_kinit(&iov, &ku, &ph, sizeof(ph), offset, UIO_READ);
@@ -306,14 +271,16 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 			return ENOEXEC;
 		}
 
-		result = load_segment(as, v, ph.p_offset, ph.p_vaddr, 
-				      ph.p_memsz, ph.p_filesz,
-				      ph.p_flags & PF_X);
+		// assume for now that vnode will remain open until we exit
+		// originally load segment
+		result = prepare_page(as, v, ph.p_offset, ph.p_vaddr, 
+				      ph.p_memsz, ph.p_filesz/*,
+				      ph.p_flags & PF_X*/); // pf_x is set when we initalize pt
 		if (result) {
 			return result;
 		}
 	}
-#endif /* OPT-A3 */
+
 	result = as_complete_load(as);
 	if (result) {
 		return result;

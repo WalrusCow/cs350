@@ -149,6 +149,7 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 	// 0 1 2 are initialized in proc_create
 	// same process may not change file_arr using different thread, inconsistency
 	// acquire the global lock
+	P(file_sem);
 	for (int i = 3; i < __OPEN_MAX; ++i) {
 		if(curproc->file_arr[i]!=NULL){
 			//full copy
@@ -164,12 +165,13 @@ sys_fork(pid_t* retval,struct trapframe *tf) {
 			VOP_INCOPEN(child->file_arr[i]->vn);
 		}
 	}
+	V(file_sem);
 
 	// make a new thread
 	result = thread_fork("child_p_thread",child,&entry,new_tf,0); // second argument...
 
 	if(result){
-		// free new_tf?
+		kfree(new_tf);
 		// need double check as_destroy(addrspace)
 		// should clean the file array for us: see proc.c
 		proc_destroy(child);

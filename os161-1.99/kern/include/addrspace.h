@@ -64,7 +64,6 @@ struct addrspace {
         size_t as_npages1;
         vaddr_t as_vbase2;
         size_t as_npages2;
-        paddr_t as_stackpbase;
 
 	//page table for three segments
 	//text segment
@@ -73,6 +72,14 @@ struct addrspace {
 	paddr_t * data_pt;
 	//stack segment
 	paddr_t * stack_pt;
+
+	// offset for vnode, beginning
+	off_t as_vbase1_offset;
+	off_t as_vbase2_offset;
+
+	// offset for vnode, end
+	size_t as_vbase1_filesize;
+	size_t as_vbase2_filesize;
 
 	//vnode for load pages
 	struct vnode * as_vn;
@@ -130,7 +137,7 @@ int               as_define_region(struct addrspace *as,
 int               as_prepare_load(struct addrspace *as);
 int               as_complete_load(struct addrspace *as);
 int               as_define_stack(struct addrspace *as, vaddr_t *initstackptr);
-
+void			  as_zero_region(paddr_t paddr, unsigned npages);
 
 /*
  * Functions in loadelf.c
