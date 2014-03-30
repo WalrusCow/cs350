@@ -1,5 +1,5 @@
 #include "opt-A3.h"
-#ifdef OPT_A3
+#if OPT_A3
 #include <types.h>
 #include <lib.h>
 #include <addrspace.h>
@@ -17,7 +17,6 @@
 int
 pt_getEntry(vaddr_t vaddr, paddr_t* paddr, int* segment_type){
 
-	vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
 	struct addrspace *as;
 
 	//we only care first 20 bits, the page number
@@ -33,64 +32,26 @@ pt_getEntry(vaddr_t vaddr, paddr_t* paddr, int* segment_type){
 		return EFAULT;
 	}
 
-	//error check
-	KASSERT(as->as_vbase1 != 0);
-	KASSERT(as->as_npages1 != 0);
-	KASSERT(as->as_vbase2 != 0);
-	KASSERT(as->as_npages2 != 0);
-	KASSERT(as->as_stackpbase != 0);
-	KASSERT((as->as_vbase1 & PAGE_FRAME) == as->as_vbase1);
-	KASSERT((as->as_vbase2 & PAGE_FRAME) == as->as_vbase2);
-	KASSERT((as->as_stackpbase & PAGE_FRAME) == as->as_stackpbase);
+	vaddr vbase;
+	paddr_t* pageTable = pt_getTable(vaddr, as, &segment_type, &vbase);
 
-	//get the base and top address for each segment
-	vbase1 = as->as_vbase1;
-	vtop1 = vbase1 + as->as_npages1 * PAGE_SIZE;
-	vbase2 = as->as_vbase2;
-	vtop2 = vbase2 + as->as_npages2 * PAGE_SIZE;
-	stackbase = USERSTACK - DUMBVM_STACKPAGES * PAGE_SIZE;
-	stacktop = USERSTACK;
-
-	//text segment
-	if(vaddr >= vbase1 && vaddr < vtop1){
-		int index = (vaddr - vbase1) / PAGE_SIZE;
-		*paddr = as->text_pt[index];
-		*segment_type = 0;
-		return 0;
-	}
-
-	//data segment
-	else if(vaddr >= vbase2 && vaddr < vtop2){
-		int index = (vaddr - vbase2) / PAGE_SIZE;
-		*paddr = as->data_pt[index];
-		*segment_type = 1;
-		return 0;
-	}
-
-	//stack segment
-	else if(vaddr >= stackbase && vaddr < stacktop){
-		int index = (vaddr - vbase2) / PAGE_SIZE;
-		*paddr = as->stack_pt[index];
-		*segment_type = 2;
-		return 0;
-	}
-
-	//error
-	else{
+	if (pageTable == NULL) {
 		return EFAULT;
 	}
 
+	int index = (vaddr - vbase) / PAGE_SIZE;
+	*paddr = pageTable[index];
+	return 0;
+
 }
 
-
-
 /*
- * after loading a demand page, store the allocated physicall address into the page table
+ * after loading a demand page, store the allocated
+ * physical address into the page table
  */
 
 int
 pt_setEntry(vaddr_t vaddr, paddr_t paddr){
-        vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
 	struct addrspace *as;
 
 	//we only care the page number and frame number
@@ -106,126 +67,71 @@ pt_setEntry(vaddr_t vaddr, paddr_t paddr){
 		return EFAULT;
 	}
 
-        //error check
-        KASSERT(as->as_vbase1 != 0);
-        KASSERT(as->as_npages1 != 0);
-        KASSERT(as->as_vbase2 != 0);
-        KASSERT(as->as_npages2 != 0);
-        KASSERT(as->as_stackpbase != 0);
-        KASSERT((as->as_vbase1 & PAGE_FRAME) == as->as_vbase1);
-        KASSERT((as->as_vbase2 & PAGE_FRAME) == as->as_vbase2);
-        KASSERT((as->as_stackpbase & PAGE_FRAME) == as->as_stackpbase);
-
-        //get the base and top address for each segment
-        vbase1 = as->as_vbase1;
-        vtop1 = vbase1 + as->as_npages1 * PAGE_SIZE;
-        vbase2 = as->as_vbase2;
-        vtop2 = vbase2 + as->as_npages2 * PAGE_SIZE;
-        stackbase = USERSTACK - DUMBVM_STACKPAGES * PAGE_SIZE;
-        stacktop = USERSTACK;
-
-	//allpcate the physicall address for a page, this page is valid
+	//allocate the physical address for a page, this page is valid
 	paddr |= PT_VALID;
 
-	//text segment
-        if(vaddr >= vbase1 && vaddr < vtop1){
-                int index = (vaddr - vbase1) / PAGE_SIZE;
-                paddr_t old_paddr = as->text_pt[index];
-		if(old_paddr & PT_READ){
-			paddr |= PT_READ;
-		}
-		if(old_paddr & PT_WRITE){
-			paddr |= PT_WRITE;
-		}
-		if(old_paddr & PT_EXE){
-			paddr |= PT_EXE;
-		}
-		as->text_pt[index] = paddr;
-		return 0;
-        }
+	vaddr_t base_vaddr;
+	int segType;
+	paddr_t* pageTable = pt_getTable(vaddr, as, &segType, &base_vaddr);
 
-        //data segment
-        else if(vaddr >= vbase2 && vaddr < vtop2){
-                int index = (vaddr - vbase2) / PAGE_SIZE;
-		paddr_t old_paddr = as->data_pt[index];
-		if(old_paddr & PT_READ){
-			paddr |= PT_READ;
-		}
-		if(old_paddr & PT_WRITE){
-			paddr |= PT_WRITE;
-		}
-		if(old_paddr & PT_EXE){
-			paddr |= PT_EXE;
-		}
-                as->data_pt[index] = paddr;
-		return 0;
-        }
+	if (pageTable == NULL) {
+		return EFAULT;
+	}
 
-        //stack segment
-        else if(vaddr >= stackbase && vaddr < stacktop){
-		int index = (vaddr - vbase2) / PAGE_SIZE;
-		paddr_t old_paddr = as->stack_pt[index];
-		if(old_paddr & PT_READ){
-			paddr |= PT_READ;
-		}
-		if(old_paddr & PT_WRITE){
-			paddr |= PT_WRITE;
-		}
-		if(old_paddr & PT_EXE){
-			paddr |= PT_EXE;
-		}
-		as->stack_pt[index] = paddr;
-		return 0;
-        }
-
-        //error
-        else{
-                return EFAULT;
-        }
+	// Index in the page table
+	int index = (vaddr - base_vaddr) / PAGE_SIZE;
+	// Keep all old flags (they are initialized at start)
+	paddr |= pageTable[index] & ~PAGE_FRAME;
+	pageTable[index] = paddr;
 
 }
 
 /* use VOP_READ to load a page
 */
 int pt_loadPage(vaddr_t vaddr, paddr_t* paddr, struct addrspace *as, int segment_type){
-	
+
 	off_t vnode_page_offset;
 	size_t readsize = PAGE_SIZE;
 	switch(segment_type){
 		case 2:
 			// stack
+			// If a stack page is not found yet, then all we need
+			// to do is find a free physical page, zero the area
+			// and return the proper address
 			// get page, then zero region
 			return 0;
 		case 0:
-			vnode_page_offset=vaddr - as->as_vbase1 +  as->as_vbase1_offset;
-			if(vnode_page_offset+PAGE_SIZE>as->as_vbase1_filesize){
-				readsize = as->as_vbase1_filesize-vnode_page_offset;
+			vnode_page_offset = vaddr - as->as_vbase1 +  as->as_vbase1_offset;
+			if(vnode_page_offset + PAGE_SIZE > as->as_vbase1_filesize){
+				readsize = as->as_vbase1_filesize - vnode_page_offset;
 			}
 			break;
 		case 1:
-			vnode_page_offset=vaddr - as->as_vbase2 + as->as_vbase2_offset;
-			if(vnode_page_offset+PAGE_SIZE>as->as_vbase2_filesize){
-				readsize = as->as_vbase2_filesize-vnode_page_offset;
+			vnode_page_offset = vaddr - as->as_vbase2 + as->as_vbase2_offset;
+			if(vnode_page_offset + PAGE_SIZE > as->as_vbase2_filesize){
+				readsize = as->as_vbase2_filesize - vnode_page_offset;
 			}
 			break;
 			// text or data
 			// calculate offset
 	}
-	
+
 	struct iovec iov;
 	struct uio u;
 	int result;
 
-	DEBUG(DB_EXEC, "ELF: Loading %lu bytes to 0x%lx\n", 
+	DEBUG(DB_EXEC, "ELF: Loading %lu bytes to 0x%lx\n",
 	      (unsigned long) filesize, (unsigned long) vaddr);
 
 	iov.iov_ubase = (userptr_t)vaddr; // start of vaddrs
 	iov.iov_len = PAGE_SIZE;		 // length of the memory space
+
 	u.uio_iov = &iov;
 	u.uio_iovcnt = 1;
 	u.uio_resid = readsize;          // amount to read from the file
 	u.uio_offset = vnode_page_offset;
-	u.uio_segflg = is_executable ? UIO_USERISPACE : UIO_USERSPACE;
+	// Only executable if in text segment
+	u.uio_segflg = segment_type ? UIO_USERSPACE : UIO_USERISPACE;
 	u.uio_rw = UIO_READ;
 	u.uio_space = as;
 
@@ -269,6 +175,61 @@ int pt_loadPage(vaddr_t vaddr, paddr_t* paddr, struct addrspace *as, int segment
 #endif
 	
 	return result;
+}
+
+/*
+ * Get the table for this vaddr, or NULL if doesn't exist.
+ * Also store the segment type in segType, and the segment base in base.
+ */
+paddr_t*
+pt_getTable(vaddr_t vaddr, struct addrspace* as, int* segType, vaddr_t* vbase) {
+
+	//error check
+	KASSERT(as->as_vbase1 != 0);
+	KASSERT(as->as_npages1 != 0);
+	KASSERT(as->as_vbase2 != 0);
+	KASSERT(as->as_npages2 != 0);
+	KASSERT(as->as_stackpbase != 0);
+	KASSERT((as->as_vbase1 & PAGE_FRAME) == as->as_vbase1);
+	KASSERT((as->as_vbase2 & PAGE_FRAME) == as->as_vbase2);
+	KASSERT((as->as_stackpbase & PAGE_FRAME) == as->as_stackpbase);
+
+	KASSERT(segType); // Not NULL, please
+
+	// All the virtual addresses
+	vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
+
+	// Get the base and top address for each segment
+	vbase1 = as->as_vbase1;
+	vtop1 = vbase1 + as->as_npages1 * PAGE_SIZE;
+	vbase2 = as->as_vbase2;
+	vtop2 = vbase2 + as->as_npages2 * PAGE_SIZE;
+	stackbase = USERSTACK - DUMBVM_STACKPAGES * PAGE_SIZE;
+	stacktop = USERSTACK;
+
+	// vaddr is from text segment
+	if(vaddr >= vbase1 && vaddr < vtop1){
+		*vbase = vaddr - vbase1;
+		*segType = 0;
+		return as->text_pt;
+	}
+
+	// vaddr is from data segment
+	else if(vaddr >= vbase2 && vaddr < vtop2){
+		*vbase = vaddr - vbase2;
+		*segType = 1;
+		return as->data_pt;
+	}
+
+	// vaddr is from stack
+	else if(vaddr >= stackbase && vaddr < stacktop){
+		*vbase = vaddr - stackbase;
+		*segType = 2;
+		return as->stack_pt;
+	}
+
+	// Invalid virtual address
+	return NULL;
 }
 
 #endif /* OPT-A3 */
