@@ -52,6 +52,11 @@
 #include "autoconf.h"  // for pseudoconfig
 
 #include "opt-A2.h"
+#include "opt-A3.h"
+
+#if OPT_A3
+#include <uw-vmstats.h>
+#endif
 
 /*
  * These two pieces of data are maintained by the makefiles and build system.
@@ -116,6 +121,10 @@ boot(void)
 	hardclock_bootstrap();
 	vfs_bootstrap();
 
+#if OPT_A3
+	vmstats_init();
+#endif /* OPT_A3 */
+
 	/* Probe and initialize devices. Interrupts should come on. */
 	kprintf("Device probe...\n");
 	KASSERT(curthread->t_curspl > 0);
@@ -150,7 +159,10 @@ shutdown(void)
 {
 
 	kprintf("Shutting down.\n");
-	
+
+#if OPT_A3
+	vmstats_print();
+#endif
 	vfs_clearbootfs();
 	vfs_clearcurdir();
 	vfs_unmountall();
