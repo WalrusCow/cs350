@@ -15,10 +15,10 @@ int
 pt_getEntry(vaddr_t vaddr, paddr_t* paddr, int* segment_type);
 
 int
-pt_setEntry(vaddr_t vaddr, paddr_t paddr, bool written);
+pt_setEntry(vaddr_t vaddr, paddr_t paddr);
 
 int
-pt_loadPage(vaddr_t vaddr, struct addrspace *as, int segment_type);
+pt_loadPage(vaddr_t vaddr, paddr_t paddr, struct addrspace *as, int segment_type);
 
 paddr_t*
 pt_getTable(vaddr_t vaddr, struct addrspace* as, int* segType, vaddr_t* vbase);

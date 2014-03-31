@@ -12,13 +12,12 @@
 #include <uio.h>
 #include <vnode.h>
 #include <uw-vmstats.h>
+#include <mips/vm.h>
 
 /*
  * get the corresponding physical address by passing in a virtual address
  */
-
-int
-pt_getEntry(vaddr_t vaddr, paddr_t* paddr, int* segment_type){
+int pt_getEntry(vaddr_t vaddr, paddr_t* paddr, int* segment_type){
 
 	struct addrspace *as;
 
@@ -54,7 +53,7 @@ pt_getEntry(vaddr_t vaddr, paddr_t* paddr, int* segment_type){
  */
 
 int
-pt_setEntry(vaddr_t vaddr, paddr_t paddr, bool written){
+pt_setEntry(vaddr_t vaddr, paddr_t paddr) {
 	struct addrspace *as;
 
 	// we only care the page number and frame number
@@ -70,9 +69,8 @@ pt_setEntry(vaddr_t vaddr, paddr_t paddr, bool written){
 		return EFAULT;
 	}
 
-	//allocate the physical address for a page, this page is valid
+	// We just allocated it, so this is obviously valid
 	paddr |= PT_VALID;
-	if (written) paddr |= PT_WRITTEN;
 
 	vaddr_t base_vaddr;
 	int segType;
@@ -91,10 +89,11 @@ pt_setEntry(vaddr_t vaddr, paddr_t paddr, bool written){
 
 }
 
-/* use VOP_READ to load a page
-*/
+/*
+ * use VOP_READ to load a page
+ */
 int
-pt_loadPage(vaddr_t vaddr, struct addrspace *as, int segment_type){
+pt_loadPage(vaddr_t vaddr, paddr_t paddr, struct addrspace *as, int segment_type) {
 	// Size to read
 	size_t readsize;
 	// Number of bytes left in the segment
@@ -133,21 +132,30 @@ pt_loadPage(vaddr_t vaddr, struct addrspace *as, int segment_type){
 
 	struct iovec iov;
 	struct uio u;
-	int result;
 
-	iov.iov_ubase = (userptr_t)vaddr; // start of vaddrs
-	iov.iov_len = PAGE_SIZE;		 // length of the memory space
+	/*
+	 * We are pretending that we are writing to kernel space even though
+	 * we're writing to the physical address of a user space virtual address.
+	 * This is a bit of a hack, but it is necessary so that we can't TLB fault
+	 * in this function, since this is called from within the fault
+	 * handler itself.
+	 */
 
-	u.uio_iov = &iov;
-	u.uio_iovcnt = 1;
-	u.uio_resid = readsize;          // amount to read from the file
-	u.uio_offset = file_offset; // Offset into the file to begin reading at
-	// Only executable if in text segment
-	u.uio_segflg = segment_type ? UIO_USERSPACE : UIO_USERISPACE;
-	u.uio_rw = UIO_READ;
-	u.uio_space = as;
+	void* kvaddr = (void*)PADDR_TO_KVADDR(paddr);
+	uio_kinit(&iov, &u, kvaddr, readsize, file_offset, UIO_READ);
+	// Destination details
+	//iov.iov_kbase = (void*)paddr;
+	//iov.iov_len = PAGE_SIZE;
+	//u.uio_iov = &iov;
+	//u.uio_iovcnt = 1;
+	//u.uio_resid = readsize; // Length to read from file
+	//u.uio_offset = file_offset; // Offset into the file to begin reading at
+	//u.uio_segflg = UIO_SYSSPACE; // Pretend like we're writing to kernel space
+	//u.uio_rw = UIO_READ;
+	//u.uio_space = as;
+	// TODO: Smarter zeroing?  Maybe only zero for stack?
 
-	result = VOP_READ(as->as_vn, &u);
+	int result = VOP_READ(as->as_vn, &u);
 	if (result) {
 		return result;
 	}
@@ -185,7 +193,7 @@ pt_loadPage(vaddr_t vaddr, struct addrspace *as, int segment_type){
 		}
 	}
 #endif
-	
+
 	return result;
 }
 
@@ -205,6 +213,7 @@ pt_getTable(vaddr_t vaddr, struct addrspace* as, int* segType, vaddr_t* vbase) {
 	KASSERT((as->as_vbase2 & PAGE_FRAME) == as->as_vbase2);
 
 	KASSERT(segType); // Not NULL, please
+	KASSERT(vbase); // Not NULL, please
 
 	// All the virtual addresses
 	vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
