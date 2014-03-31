@@ -54,7 +54,7 @@ pt_getEntry(vaddr_t vaddr, paddr_t* paddr, int* segment_type){
  */
 
 int
-pt_setEntry(vaddr_t vaddr, paddr_t paddr, bool written){
+pt_setEntry(vaddr_t vaddr, paddr_t paddr, bool writeable) {
 	struct addrspace *as;
 
 	// we only care the page number and frame number
@@ -72,7 +72,6 @@ pt_setEntry(vaddr_t vaddr, paddr_t paddr, bool written){
 
 	//allocate the physical address for a page, this page is valid
 	paddr |= PT_VALID;
-	if (written) paddr |= PT_WRITTEN;
 
 	vaddr_t base_vaddr;
 	int segType;
@@ -86,6 +85,10 @@ pt_setEntry(vaddr_t vaddr, paddr_t paddr, bool written){
 	int index = (vaddr - base_vaddr) / PAGE_SIZE;
 	// Keep all old flags (they are initialized at start)
 	paddr |= pageTable[index] & ~PAGE_FRAME;
+
+	// Explicit control over writeable bit
+	paddr = writeable ? (paddr | PT_WRITE) : (paddr & ~PT_WRITE);
+
 	pageTable[index] = paddr;
 	return 0;
 

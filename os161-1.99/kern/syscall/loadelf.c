@@ -113,7 +113,7 @@ prepare_page(struct addrspace *as, struct vnode *v,
 	}
 	if(as->as_vbase2_filesize == 0){
 		as->as_vbase2_offset = offset;
-		as->as_vbase2_filesize =filesize;
+		as->as_vbase2_filesize = filesize;
 		return 0;
 	}
 
@@ -274,8 +274,7 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 		// assume for now that vnode will remain open until we exit
 		// originally load segment
 		result = prepare_page(as, v, ph.p_offset, ph.p_vaddr, 
-				      ph.p_memsz, ph.p_filesz/*,
-				      ph.p_flags & PF_X*/); // pf_x is set when we initalize pt
+				      ph.p_memsz, ph.p_filesz);
 		if (result) {
 			return result;
 		}

@@ -162,7 +162,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	if(result) return result;
 
-	bool page_written;
+	bool writeable = true;
 
 	if((paddr & PT_VALID) == 0){
 		newPage = true;
@@ -170,11 +170,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		paddr = getppages(1); // new physical page
 		as_zero_region(paddr, 1);
 
-		// Only a new text page is not written
-		page_written = !(newPage && segment_type == 0);
-
 		// Update page table with this vaddr
-		result = pt_setEntry(faultaddress, paddr, page_written);
+		result = pt_setEntry(faultaddress, paddr, writeable);
 		// pass in as, since now it does not have to be current address
 		// space because load page may take a will -> yield cpu to other
 		// process
@@ -186,7 +183,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	else {
 		// Keep track of previous
 		vmstats_inc(VMSTAT_TLB_RELOAD);
-		page_written = paddr & PT_WRITTEN;
+		writeable = !!(paddr & PT_WRITE);
 
 		// Get the actual *address* and ignore the flags from page table
 		paddr &= PAGE_FRAME;
@@ -200,13 +197,16 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	uint32_t tlb_hi, tlb_lo;
 	tlb_hi = faultaddress;
 	tlb_lo = paddr | TLBLO_VALID;
-	if (newPage || segment_type != 0 || !page_written) {
+	if (writeable) {
 		// Writable if new page or not text segment or not yet written page
 		tlb_lo |= TLBLO_DIRTY;
 	}
 
 	// Insert into the tlb (choose the index for us)
+	// No interrupts while messing with TLB
+	int spl = splhigh();
 	int index = tlb_insert(tlb_hi, tlb_lo);
+	splx(spl);
 
 	if (newPage) {
 		// Load the page into memory - it is a new page
@@ -221,16 +221,22 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		if (segment_type == 0) {
 			// Update the page table with the new non-written flag
 			// No interrupts while TLB-ing
-			int spl = splhigh();
+			spl = splhigh();
 
 			// Remove the written flag from the page table
 			// because we have now written the page
-			pt_setEntry(faultaddress, paddr, true);
+			pt_setEntry(faultaddress, paddr, false);
+
+			tlb_lo &= ~TLBLO_DIRTY;
 
 			// Find index of the vaddr thing
 			index = tlb_probe(tlb_hi, 0);
-			tlb_lo &= ~TLBLO_DIRTY;
-			tlb_write(tlb_hi, tlb_lo, index);
+			if (index < 0) {
+				tlb_insert(tlb_hi, tlb_lo);
+			}
+			else {
+				tlb_write(tlb_hi, tlb_lo, index);
+			}
 			splx(spl);
 			return 0;
 		}
@@ -257,8 +263,6 @@ int
 tlb_insert(uint32_t tlb_hi, uint32_t tlb_lo) {
 	uint32_t ehi, elo;
 	int index;
-	// No interrupts while messing with TLB
-	int spl = splhigh();
 
 	//if there exists free TLB entry
 	for (index = 0; index < NUM_TLB; index++) {
@@ -270,7 +274,6 @@ tlb_insert(uint32_t tlb_hi, uint32_t tlb_lo) {
 		vmstats_inc(VMSTAT_TLB_FAULT_FREE);
 
 		tlb_write(tlb_hi, tlb_lo, index);
-		splx(spl);
 		return index;
 	}
 
@@ -279,7 +282,6 @@ tlb_insert(uint32_t tlb_hi, uint32_t tlb_lo) {
 	index = tlb_get_rr_victim();
 
 	tlb_write(tlb_hi, tlb_lo, index);
-	splx(spl);
 	return index;
 }
 #endif /* OPT_A3 */
