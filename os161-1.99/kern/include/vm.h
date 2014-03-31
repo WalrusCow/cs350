@@ -36,20 +36,29 @@
  * You'll probably want to add stuff here.
  */
 
-
 #include <machine/vm.h>
 
 /* Fault-type arguments to vm_fault() */
-#define VM_FAULT_READ        0    /* A read was attempted */
-#define VM_FAULT_WRITE       1    /* A write was attempted */
-#define VM_FAULT_READONLY    2    /* A write to a readonly page was attempted*/
+#define VM_FAULT_READ		0 /* A read was attempted */
+#define VM_FAULT_WRITE		1 /* A write was attempted */
+#define VM_FAULT_READONLY	2 /* A write to a readonly page was attempted*/
+#define VM_STACKPAGES		12 // Number of stack pages
 
+// enum for types of vaddrs
+typedef enum { TEXT, DATA, STACK } seg_type;
 
 /* Initialization function */
 void vm_bootstrap(void);
 
+//TODO
+//static int get_next_victim(void);
+int tlb_insert(uint32_t tlb_hi, uint32_t tlb_lo);
+
 /* Fault handling function called by trap code */
 int vm_fault(int faulttype, vaddr_t faultaddress);
+
+// TODO: This doesn't belong here
+paddr_t getppages(unsigned long npages);
 
 /* Allocate/free kernel heap pages (called by kmalloc/kfree) */
 vaddr_t alloc_kpages(int npages);
@@ -59,5 +68,6 @@ void free_kpages(vaddr_t addr);
 void vm_tlbshootdown_all(void);
 void vm_tlbshootdown(const struct tlbshootdown *);
 
+int read_vaddr(vaddr_t vaddr, struct addrspace* as, paddr_t* paddr, seg_type* seg);
 
 #endif /* _VM_H_ */
