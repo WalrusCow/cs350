@@ -17,30 +17,30 @@ vm_bootstrap(void)
 	/* May need to add code. */
 }
 
-#if 0 
+#if 0
 /* You will need to call this at some point */
 static
 paddr_t
 getppages(unsigned long npages)
 {
-   /* Adapt code form dumbvm or implement something new */
+	/* Adapt code form dumbvm or implement something new */
 	 (void)npages;
 	 panic("Not implemented yet.\n");
-   return (paddr_t) NULL;
+	return (paddr_t) NULL;
 }
 #endif
 
 /* Allocate/free some kernel-space virtual pages */
-vaddr_t 
+vaddr_t
 alloc_kpages(int npages)
 {
-   /* Adapt code form dumbvm or implement something new */
+	/* Adapt code form dumbvm or implement something new */
 	 (void)npages;
 	 panic("Not implemented yet.\n");
-   return (vaddr_t) NULL;
+	return (vaddr_t) NULL;
 }
 
-void 
+void
 free_kpages(vaddr_t addr)
 {
 	/* nothing - leak the memory. */
@@ -64,11 +64,11 @@ vm_tlbshootdown(const struct tlbshootdown *ts)
 int
 vm_fault(int faulttype, vaddr_t faultaddress)
 {
-  /* Adapt code form dumbvm or implement something new */
+	/* Adapt code form dumbvm or implement something new */
 	(void)faulttype;
 	(void)faultaddress;
 	panic("Not implemented yet.\n");
-  return 0;
+	return 0;
 
 }
 #endif /* OPT_VM */

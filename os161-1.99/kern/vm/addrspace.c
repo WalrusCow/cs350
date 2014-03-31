@@ -74,7 +74,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	 */
 
 	(void)old;
-	
+
 	*ret = newas;
 	return 0;
 }
@@ -85,7 +85,7 @@ as_destroy(struct addrspace *as)
 	/*
 	 * Clean up as needed.
 	 */
-	
+
 	kfree(as);
 }
 
@@ -181,7 +181,7 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 
 	/* Initial user-level stack pointer */
 	*stackptr = USERSTACK;
-	
+
 	return 0;
 }
 
