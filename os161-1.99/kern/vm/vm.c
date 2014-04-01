@@ -10,6 +10,7 @@
 #include <lib.h>
 #include <addrspace.h>
 #include <vm.h>
+#include <segment.h>
 
 #include <spl.h>
 #include <spinlock.h>
@@ -18,28 +19,15 @@
 #include <current.h>
 #include <proc.h>
 #include <uw-vmstats.h>
+#include <coremap.h>
 
 // TODO: Use the bootstrap function?
-static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 static struct spinlock victim_lock = SPINLOCK_INITIALIZER;
 static volatile unsigned int next_victim = 0;
 
 void
 vm_bootstrap(void) {
 	/* May need to add code. */
-}
-
-paddr_t
-getppages(unsigned long npages) {
-	// TODO: This is dumbvm code
-	paddr_t addr;
-
-	spinlock_acquire(&stealmem_lock);
-	// TODO: This obviously needs to change
-	addr = ram_stealmem(npages);
-	spinlock_release(&stealmem_lock);
-
-	return addr;
 }
 
 /* Allocate/free some kernel-space virtual pages */
@@ -95,8 +83,12 @@ vm_tlbshootdown(const struct tlbshootdown *ts) {
 }
 
 int
-vm_fault(int faulttype, vaddr_t faultaddress) {
-	faultaddress &= PAGE_FRAME;
+vm_fault(int faulttype, vaddr_t faultPage) {
+	// faultaddress not in TLB so check the PT
+	// If not in PT, request a new page and update PT & TLB
+
+	// We only care about the page
+	faultPage &= PAGE_FRAME;
 
 	switch (faulttype) {
 		case VM_FAULT_READONLY:
@@ -106,7 +98,8 @@ vm_fault(int faulttype, vaddr_t faultaddress) {
 		case VM_FAULT_WRITE:
 			break;
 		default:
-			return EINVAL; }
+			return EINVAL;
+	}
 
 	// Probably kernel fault in boot
 	if (curproc == NULL) return EFAULT;
@@ -116,18 +109,37 @@ vm_fault(int faulttype, vaddr_t faultaddress) {
 	if (as == NULL) return EFAULT;
 
 	paddr_t paddr;
+
 	seg_type seg;
-	// Convert the virtual address into a physical one. Also get segment type.
-	int err = read_vaddr(faultaddress, as, &paddr, &seg);
+	int err = get_seg_type(faultPage, as, &seg);
 	if (err) return err;
 
-	/* make sure it's page-aligned */
-	KASSERT((paddr & PAGE_FRAME) == paddr);
+	// Get the page table entry
+	struct pte* pte = get_ptEntry(faultPage, seg, as);
+	// Invalid address, somehow
+	if (pte == NULL) return EFAULT;
 
-	/* Disable interrupts on this CPU while frobbing the TLB. */
+	if (pte->paddr & PT_VALID) {
+		// Entry is valid
+		// Discard the flags
+		paddr = pte->paddr & PAGE_FRAME;
+	}
+	else {
+		// Entry not valid
+		// Now we must request a new page and update the page table and TLB
+		paddr = getppages(1);
+
+		// Now also prepare the page, as necessary
+		prepare_page(paddr, faultPage, seg, as);
+
+		// Now update the page table
+		pt_setEntry(paddr, faultPage, seg, as);
+	}
+
+	// Disable interrupts while using TLB
 	int spl = splhigh();
 
-	uint32_t tlb_hi = faultaddress;
+	uint32_t tlb_hi = faultPage;
 	// TODO: dirty bit off for text segment
 	uint32_t tlb_lo = paddr | TLBLO_VALID | TLBLO_DIRTY;
 
@@ -162,48 +174,5 @@ tlb_insert(uint32_t tlb_hi, uint32_t tlb_lo) {
 	return idx;
 }
 #endif /* OPT_VM */
-
-int
-read_vaddr(vaddr_t vaddr, struct addrspace* as, paddr_t* paddr, seg_type* seg) {
-	vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
-
-	/* Assert that the address space has been set up properly. */
-	KASSERT(as->as_vbase1 != 0);
-	KASSERT(as->as_pbase1 != 0);
-	KASSERT(as->as_npages1 != 0);
-	KASSERT(as->as_vbase2 != 0);
-	KASSERT(as->as_pbase2 != 0);
-	KASSERT(as->as_npages2 != 0);
-	KASSERT(as->as_stackpbase != 0);
-	KASSERT((as->as_vbase1 & PAGE_FRAME) == as->as_vbase1);
-	KASSERT((as->as_pbase1 & PAGE_FRAME) == as->as_pbase1);
-	KASSERT((as->as_vbase2 & PAGE_FRAME) == as->as_vbase2);
-	KASSERT((as->as_pbase2 & PAGE_FRAME) == as->as_pbase2);
-	KASSERT((as->as_stackpbase & PAGE_FRAME) == as->as_stackpbase);
-
-	vbase1 = as->as_vbase1;
-	vtop1 = vbase1 + as->as_npages1 * PAGE_SIZE;
-	vbase2 = as->as_vbase2;
-	vtop2 = vbase2 + as->as_npages2 * PAGE_SIZE;
-	stackbase = USERSTACK - VM_STACKPAGES * PAGE_SIZE;
-	stacktop = USERSTACK;
-
-	if (vaddr >= vbase1 && vaddr < vtop1) {
-		*paddr = (vaddr - vbase1) + as->as_pbase1;
-		*seg = TEXT;
-	}
-	else if (vaddr >= vbase2 && vaddr < vtop2) {
-		*paddr = (vaddr - vbase2) + as->as_pbase2;
-		*seg = DATA;
-	}
-	else if (vaddr >= stackbase && vaddr < stacktop) {
-		*paddr = (vaddr - stackbase) + as->as_stackpbase;
-		*seg = STACK;
-	}
-	else {
-		return EFAULT;
-	}
-	return 0;
-}
 
 #endif /* UW */

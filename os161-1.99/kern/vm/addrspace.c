@@ -41,13 +41,14 @@ as_create(void) {
 	struct addrspace *as = kmalloc(sizeof(struct addrspace));
 	if (as == NULL) return NULL;
 
-	as->as_vbase1 = 0;
-	as->as_pbase1 = 0;
-	as->as_npages1 = 0;
-	as->as_vbase2 = 0;
-	as->as_pbase2 = 0;
-	as->as_npages2 = 0;
-	as->as_stackpbase = 0;
+	as->text_seg = NULL;
+	as->data_seg = NULL;
+
+	as->text_pt = NULL;
+	as->data_pt = NULL;
+	as->stack_pt = NULL;
+
+	as->vn = NULL;
 
 	return as;
 }
@@ -61,6 +62,7 @@ as_zero_region(paddr_t paddr, unsigned npages)
 
 int
 as_copy(struct addrspace *old, struct addrspace **ret) {
+	// TODO
 	struct addrspace *new;
 
 	new = as_create();
@@ -68,32 +70,11 @@ as_copy(struct addrspace *old, struct addrspace **ret) {
 		return ENOMEM;
 	}
 
-	new->as_vbase1 = old->as_vbase1;
-	new->as_npages1 = old->as_npages1;
-	new->as_vbase2 = old->as_vbase2;
-	new->as_npages2 = old->as_npages2;
-
 	/* (Mis)use as_prepare_load to allocate some physical memory. */
 	if (as_prepare_load(new)) {
 		as_destroy(new);
 		return ENOMEM;
 	}
-
-	KASSERT(new->as_pbase1 != 0);
-	KASSERT(new->as_pbase2 != 0);
-	KASSERT(new->as_stackpbase != 0);
-
-	memmove((void *)PADDR_TO_KVADDR(new->as_pbase1),
-		(const void *)PADDR_TO_KVADDR(old->as_pbase1),
-		old->as_npages1*PAGE_SIZE);
-
-	memmove((void *)PADDR_TO_KVADDR(new->as_pbase2),
-		(const void *)PADDR_TO_KVADDR(old->as_pbase2),
-		old->as_npages2*PAGE_SIZE);
-
-	memmove((void *)PADDR_TO_KVADDR(new->as_stackpbase),
-		(const void *)PADDR_TO_KVADDR(old->as_stackpbase),
-		VM_STACKPAGES*PAGE_SIZE);
 
 	*ret = new;
 	return 0;
@@ -101,6 +82,7 @@ as_copy(struct addrspace *old, struct addrspace **ret) {
 
 void
 as_destroy(struct addrspace *as) {
+	// TODO
 	kfree(as);
 }
 

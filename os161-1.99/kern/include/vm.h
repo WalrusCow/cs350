@@ -44,21 +44,15 @@
 #define VM_FAULT_READONLY	2 /* A write to a readonly page was attempted*/
 #define VM_STACKPAGES		12 // Number of stack pages
 
-// enum for types of vaddrs
-typedef enum { TEXT, DATA, STACK } seg_type;
+#define STACK_BASE USERSTACK - NUM_PAGES*PAGE_SIZE
 
 /* Initialization function */
 void vm_bootstrap(void);
 
-//TODO
-//static int get_next_victim(void);
 int tlb_insert(uint32_t tlb_hi, uint32_t tlb_lo);
 
 /* Fault handling function called by trap code */
 int vm_fault(int faulttype, vaddr_t faultaddress);
-
-// TODO: This doesn't belong here
-paddr_t getppages(unsigned long npages);
 
 /* Allocate/free kernel heap pages (called by kmalloc/kfree) */
 vaddr_t alloc_kpages(int npages);
