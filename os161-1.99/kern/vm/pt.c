@@ -143,28 +143,18 @@ pt_loadPage(vaddr_t vaddr, paddr_t paddr, struct addrspace *as, int segment_type
 
 	void* kvaddr = (void*)PADDR_TO_KVADDR(paddr);
 	uio_kinit(&iov, &u, kvaddr, readsize, file_offset, UIO_READ);
-	// Destination details
-	//iov.iov_kbase = (void*)paddr;
-	//iov.iov_len = PAGE_SIZE;
-	//u.uio_iov = &iov;
-	//u.uio_iovcnt = 1;
-	//u.uio_resid = readsize; // Length to read from file
-	//u.uio_offset = file_offset; // Offset into the file to begin reading at
-	//u.uio_segflg = UIO_SYSSPACE; // Pretend like we're writing to kernel space
-	//u.uio_rw = UIO_READ;
-	//u.uio_space = as;
-	// TODO: Smarter zeroing?  Maybe only zero for stack?
 
 	int result = VOP_READ(as->as_vn, &u);
 	if (result) {
 		return result;
 	}
 
-	if (u.uio_resid != 0) {
-		/* short read; problem with executable? */
-		kprintf("ELF: short read on segment - file truncated?\n");
-		return ENOEXEC;
-	}
+	// TODO: Is this warning valid? Use GDB to find out..
+	//if (u.uio_resid != 0) {
+	//	/* short read; problem with executable? */
+	//	kprintf("ELF: short read on segment - file truncated?\n");
+	//	return ENOEXEC;
+	//}
 
 	/*
 	 * If memsize > filesize, the remaining space should be
