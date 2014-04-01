@@ -4,9 +4,6 @@
 #define PT_VALID 0x00000200
 #define PT_DIRTY 0x00000400
 
-// Was this page written properly yet?
-#define PT_WRITTEN 0x00000001
-
 #define PT_READ 0X00000080
 #define PT_WRITE 0x00000040
 #define PT_EXE 0x00000020
