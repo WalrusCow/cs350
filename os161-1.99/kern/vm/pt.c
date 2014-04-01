@@ -228,21 +228,21 @@ pt_getTable(vaddr_t vaddr, struct addrspace* as, int* segType, vaddr_t* vbase) {
 
 	// vaddr is from text segment
 	if(vaddr >= vbase1 && vaddr < vtop1){
-		*vbase = vaddr - vbase1;
+		*vbase = vbase1;
 		*segType = 0;
 		return as->text_pt;
 	}
 
 	// vaddr is from data segment
 	else if(vaddr >= vbase2 && vaddr < vtop2){
-		*vbase = vaddr - vbase2;
+		*vbase = vbase2;
 		*segType = 1;
 		return as->data_pt;
 	}
 
 	// vaddr is from stack
 	else if(vaddr >= stackbase && vaddr < stacktop){
-		*vbase = vaddr - stackbase;
+		*vbase = stackbase;
 		*segType = 2;
 		return as->stack_pt;
 	}
