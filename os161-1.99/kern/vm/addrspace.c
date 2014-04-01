@@ -140,15 +140,17 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	(void)writeable;
 	(void)executable;
 
-	if (as->as_vbase1 == 0) {
-		as->as_vbase1 = vaddr;
-		as->as_npages1 = npages;
+	if (as->text_pt == NULL) {
+		// Create text page table
+		as->text_pt = pt_create(...);
+		if (as->text_pt == NULL) return ENOMEM;
 		return 0;
 	}
 
-	if (as->as_vbase2 == 0) {
-		as->as_vbase2 = vaddr;
-		as->as_npages2 = npages;
+	if (as->data_pt == NULL) {
+		// Create data page table
+		as->data_pt = pt_create(...);
+		if (as->data_pt == NULL) return ENOMEM;
 		return 0;
 	}
 
@@ -161,10 +163,8 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 
 int
 as_prepare_load(struct addrspace *as) {
-	KASSERT(as->as_pbase1 == 0);
-	KASSERT(as->as_pbase2 == 0);
-	KASSERT(as->as_stackpbase == 0);
 
+	/*
 	as->as_pbase1 = getppages(as->as_npages1);
 	if (as->as_pbase1 == 0) {
 		return ENOMEM;
@@ -183,6 +183,7 @@ as_prepare_load(struct addrspace *as) {
 	as_zero_region(as->as_pbase1, as->as_npages1);
 	as_zero_region(as->as_pbase2, as->as_npages2);
 	as_zero_region(as->as_stackpbase, VM_STACKPAGES);
+	*/
 
 	return 0;
 }
@@ -196,8 +197,6 @@ as_complete_load(struct addrspace *as) {
 
 int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr) {
-	KASSERT(as->as_stackpbase != 0);
-
 	*stackptr = USERSTACK;
 	return 0;
 }
