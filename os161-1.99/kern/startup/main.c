@@ -56,7 +56,7 @@
 
 #if OPT_A3
 #include <uw-vmstats.h>
-#include <coremap.c>
+#include <coremap.h>
 #endif
 /*
  * These two pieces of data are maintained by the makefiles and build system.

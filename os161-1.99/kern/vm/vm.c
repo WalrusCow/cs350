@@ -23,6 +23,10 @@
 #include <uw-vmstats.h>
 #include <pt.h>
 #include <coremap.h>
+#include <segments.h>
+
+//recored is the coremap set up
+static bool coremap_set_up = false;
 
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
@@ -59,17 +63,27 @@ void
 vm_bootstrap(void)
 {
 	#if OPT_A3
+	//initialize coremap
 	coremaps_init();
+	coremap_set_up = true;
 	#endif /* OPT-A3 */
 }
 
 /* Allocate/free some kernel-space virtual pages */
-vaddr_t 
+vaddr_t
 alloc_kpages(int npages)
 {
 	#if OPT_A3
 	paddr_t pa;
-	pa = getppages(npages);
+	//before coremap set up
+	if(coremap_set_up == false){
+		pa = getppages(npages);
+	}
+	//after coremap set up
+	else{
+		//for kernel, no address space
+		pa = coremaps_getppages(npages, NULL, 0);
+	}
 	if (pa==0) {
 			return 0;
 	}
@@ -82,13 +96,12 @@ alloc_kpages(int npages)
 	#endif /* OPT-A3 */
 }
 
-void 
+void
 free_kpages(vaddr_t addr)
 {
 	#if OPT_A3
-	/* nothing - leak the memory. */
-
-	(void)addr;
+	//free page
+	coremaps_free(addr);
 	#else
 	/* nothing - leak the memory. */
 
@@ -116,19 +129,14 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	#if OPT_A3
 
 	paddr_t paddr;
-
 	struct addrspace *as;
 
 	faultaddress &= PAGE_FRAME;
-
-	DEBUG(DB_VM, "dumbvm: fault: 0x%x\n", faultaddress);
 
 	switch (faulttype) {
 		case VM_FAULT_READONLY:
 			// read-only - error
 			return 1;
-			/* We always create pages read-write, so we can't get this */
-			panic("dumbvm: got VM_FAULT_READONLY\n");
 		case VM_FAULT_READ:
 		case VM_FAULT_WRITE:
 			break;
@@ -137,57 +145,44 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	}
 
 	if (curproc == NULL) {
-		/*
-		 * No process. This is probably a kernel fault early
-		 * in boot. Return EFAULT so as to panic instead of
-		 * getting into an infinite faulting loop.
-		 */
+		// Probably kernel fault
 		return EFAULT;
 	}
 
 	as = curproc_getas();
 	if (as == NULL) {
-		/*
-		 * No address space set up. This is probably also a
-		 * kernel fault early in boot.
-		 */
+		// Probably kernel fault
 		return EFAULT;
 	}
 
-	int segment_type;
+	seg_type segment_type;
+	int result = get_seg_type(faultaddress, as, &segment_type);
+	if (result) return result;
+
 	// True if the page is a new one (wasn't in page table)
 	bool newPage = false;
 
 	// get the paddr
-	int result = pt_getEntry(faultaddress, &paddr, &segment_type);
+	result = pt_getEntry(faultaddress, &paddr);
 
-	if(result) return result;
-
-	bool page_written;
 
 	if((paddr & PT_VALID) == 0){
 		newPage = true;
 		// Not loaded in page table yet - load it up
-		paddr = getppages(1); // new physical page
-		as_zero_region(paddr, 1);
-
-		// Only a new text page is not written
-		page_written = !(newPage && segment_type == 0);
+		paddr = coremaps_getppages(1, as, faultaddress); // new physical page
 
 		// Update page table with this vaddr
-		result = pt_setEntry(faultaddress, paddr, page_written);
+		result = pt_setEntry(faultaddress, paddr);
 		// pass in as, since now it does not have to be current address
 		// space because load page may take a will -> yield cpu to other
 		// process
-		if(result) {
-			// free page ?
+		if (result) {
+			// free page ? probably...
 			return result;
 		}
 	}
 	else {
-		// Keep track of previous
-		page_written = paddr & PT_WRITTEN;
-
+		vmstats_inc(VMSTAT_TLB_RELOAD);
 		// Get the actual *address* and ignore the flags from page table
 		paddr &= PAGE_FRAME;
 	}
@@ -200,41 +195,26 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	uint32_t tlb_hi, tlb_lo;
 	tlb_hi = faultaddress;
 	tlb_lo = paddr | TLBLO_VALID;
-	if (newPage || segment_type != 0 || !page_written) {
-		// Writable if new page or not text segment or not yet written page
-		tlb_lo |= TLBLO_DIRTY;
-	}
+	// Text segment is not writeable
+	if (segment_type != TEXT) tlb_lo |= TLBLO_DIRTY;
 
 	// Insert into the tlb (choose the index for us)
 	tlb_insert(tlb_hi, tlb_lo);
 
 	if (newPage) {
 		// Load the page into memory - it is a new page
-		result = pt_loadPage(faultaddress, as, segment_type);
+		result = pt_loadPage(faultaddress, paddr, as, segment_type);
 
 		if (result) {
 			// Invalidate TLB and page table entries?
 			return result;
 		}
-
-		// Text segment was writable to load ELF. Fix that.
-		if (segment_type == 0) {
-			// Update the page table with the new non-written flag
-			// No interrupts while TLB-ing
-			int spl = splhigh();
-
-			// Remove the written flag from the page table
-			// because we have now written the page
-			pt_setEntry(faultaddress, paddr, true);
-
-			// Find index of the vaddr thing
-//			index = tlb_probe(tlb_hi, 0);
-			tlb_lo &= ~TLBLO_DIRTY;
-//			tlb_write(tlb_hi, tlb_lo, index);
-			tlb_insert(tlb_hi, tlb_lo);
-			splx(spl);
-			return 0;
-		}
+		// TODO: Update TLB and page table here, or above?
+		// ... it might be better to do it here.
+		// one thing to think about: can we swap out the physical page
+		// in between then and now?  I seriously doubt it.
+		// Maybe put in a check when choosing a page to swap to check if
+		// the page has been loaded, and only swap those that have?
 	}
 	return 0;
 
@@ -260,12 +240,6 @@ tlb_insert(uint32_t tlb_hi, uint32_t tlb_lo) {
 	int index;
 	// No interrupts while messing with TLB
 	int spl = splhigh();
-
-	index = tlb_probe(tlb_hi, 0);
-	if(index >= 0){
-		tlb_write(tlb_hi, tlb_lo, index);
-		return index;
-	}
 
 	//if there exists free TLB entry
 	for (index = 0; index < NUM_TLB; index++) {

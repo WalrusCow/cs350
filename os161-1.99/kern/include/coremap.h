@@ -1,11 +1,15 @@
+#ifndef _COREMAP_H_
+#define _COREMAP_H_
+
 #include "opt-A3.h"
 #if OPT_A3
+
 #include <addrspace.h>
 
 //entry in the coremap table
 struct coremap{
 	//as pointer
-	addrspace* cm_as;
+	struct addrspace* cm_as;
 	//corresponding vertual address
 	vaddr_t cm_vaddr;
 	//indicate is the fram allocated or not
@@ -42,4 +46,7 @@ coremaps_free(paddr_t paddr);
  */
 void
 coremaps_as_free(struct addrspace* as);
-#endif
+
+#endif /* OPT-A3 */
+
+#endif /* _COREMAP_H_ */
