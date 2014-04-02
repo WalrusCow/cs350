@@ -177,11 +177,11 @@ void pt_invalid(vaddr_t vaddr, struct addrspace* as){
 	seg_type type;
 	get_seg_type(vaddr, as, &type);
 
-        struct segment* seg = get_segment(type, as);
-        paddr_t* pageTable = get_pt(type, as);
+	struct segment* seg = get_segment(type, as);
+	paddr_t* pageTable = get_pt(type, as);
 
-        // Index in the page table
-        int index = (vaddr - seg->vbase) / PAGE_SIZE;
+	// Index in the page table
+	int index = (vaddr - seg->vbase) / PAGE_SIZE;
 
 	//invalid that entry
 	paddr_t paddr = pageTable[index];

@@ -55,23 +55,7 @@ seg_create(seg_type type, off_t offset, size_t filesz, size_t sz,
 	seg->type = type;
 	seg->filesize = filesz;
 	seg->file_offset = offset;
-	seg->npages = 0;
+	seg->npages = (seg->vtop - seg->vbase) / PAGE_SIZE;
 
 	return seg;
-}
-
-/*
- * get the number of pages in one segment
- */
-unsigned int seg_npages(seg_type type, struct addrspace* as){
-	switch(type){
-		case TEXT:
-			return as->text_seg->npages;
-		case DATA:
-			return as->data_seg->npages;
-		case STACK:
-			return as->stack_seg->npages;
-	}
-
-	return 0;
 }

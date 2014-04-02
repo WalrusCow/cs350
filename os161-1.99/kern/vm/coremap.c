@@ -1,3 +1,4 @@
+#include "opt-A3.h"
 #if OPT_A3
 #include <coremap.h>
 #include <types.h>
@@ -10,6 +11,7 @@
 #include <current.h>
 #include <uw-vmstats.h>
 #include <segments.h>
+#include <synch.h>
 
 static paddr_t coremaps_base;
 static paddr_t coremaps_end;
@@ -23,12 +25,11 @@ static struct lock* coremaps_lock = NULL;
 //simple page replacement alogrithm
 static unsigned int next_victim = 0;
 static int coremaps_get_rr_victim(void){
-        int victim;
+	int victim;
 
-        victim = next_victim;
-        next_victim = (next_victim + 1) % coremaps_napges;
-        return victim;
-
+	victim = next_victim;
+	next_victim = (next_victim + 1) % coremaps_napges;
+	return victim;
 }
 
 /*
@@ -71,7 +72,7 @@ void coremaps_init(){
 	coremaps_base *= PAGE_SIZE;
 
 	//update the number of frames in the memory
-	coremaps_napges = (coremaps_end - coremaps_base) / PAGE_SIZE;
+	coremaps_npages = (coremaps_end - coremaps_base) / PAGE_SIZE;
 
 	//initialze the coremaps
 	for(int i = 0; i < coremaps_npages; i++){
@@ -137,7 +138,7 @@ coremaps_getppages(unsigned long npages, struct addrspace* as, vaddr_t vaddr){
 		unsigned int block_size = 0;
 		unsigned int block_index = 0;
 		//free page exist
-		for(int i = 0; i < coremaps_npages; i++){
+		for(size_t i = 0; i < coremaps_npages; i++){
 			if(coremaps[i].free == true){
 				//the free pages are consecutive
 				if(block_index == i - 1){
@@ -145,10 +146,10 @@ coremaps_getppages(unsigned long npages, struct addrspace* as, vaddr_t vaddr){
 					block_size += 1;
 					//have enough size
 					if(block_size == npages){
-						int index = block_index - npages;
+						size_t index = block_index - npages;
 						paddr_t paddr = index * PAGE_SIZE + coremaps_base;
 						//allocate pages
-						int n = (int)npages;
+						size_t n = npages;
 						while(n != 0){
 							coremaps[index].as = as;
 							coremaps[index].paddr = paddr;
@@ -285,34 +286,17 @@ coremaps_free(paddr_t paddr){
  */
 void
 coremaps_as_free(struct addrspace* as){
+	// Free memory for all segments from this address space
+	for (seg_type type = TEXT; type <= STACK; ++type) {
+		paddr_t* pt = get_pt(type, as);
+		if (pt == NULL) continue;
+		struct segment* seg = get_segment(type, as);
+		if (seg == NULL) continue;
 
-	//free text segment
-	paddr_t * text_pt = as->text_pt;
-	int text_npages = (int)seg_npages(TEXT, as);
-	for(int i = 0; i < text_npages; i++){
-		paddr_t paddr = text_pt[i];
-		if(paddr & PT_VALID){
-			coremaps_free(paddr & PAGE_FRAME);
-		}
-	}
-
-	//free data segment
-	paddr_t * data_pt = as->text_pt;
-	int data_npages = (int)seg_npages(DATA, as);
-	for(int i = 0; i < data_npages; i++){
-		paddr_t paddr = data_pt[i];
-		if(paddr & PT_VALID){
-			coremaps_free(paddr & PAGE_FRAME);
-		}
-	}
-
-	//free stack segment
-	paddr_t * stack_pt = as->stack_pt;
-	int stack_npages = (int)seg_npages(STACK, as);
-	for(int i = 0; i < stack_npages; i++){
-		paddr_t paddr = stack_pt[i];
-		if(paddr & PT_VALID){
-			corempas_free(paddr & PAGE_FRAME);
+		// Iterate over the page table
+		for (size_t npages = seg->npages; npages > 0; --npages) {
+			paddr_t paddr = pt[npages-1];
+			if (paddr & PT_VALID) coremaps_free(paddr & PAGE_FRAME);
 		}
 	}
 }

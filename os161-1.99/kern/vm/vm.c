@@ -85,7 +85,7 @@ alloc_kpages(int npages)
 		pa = coremaps_getppages(npages, NULL, 0);
 	}
 	if (pa==0) {
-			return 0;
+		return 0;
 	}
 	return PADDR_TO_KVADDR(pa);
 	#else
@@ -164,7 +164,6 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	// get the paddr
 	result = pt_getEntry(faultaddress, &paddr);
-
 
 	if((paddr & PT_VALID) == 0){
 		newPage = true;

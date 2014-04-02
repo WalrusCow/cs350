@@ -267,8 +267,6 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		as->text_pt = kmalloc(sizeof(paddr_t) * npages);
 		if (as->text_pt == NULL) return ENOMEM;
 
-		as->text_seg->npages = npages;
-
 		// Initialize the page table
 		for(size_t i = 0; i < npages; i++){
 			as->text_pt[i] = flags;
@@ -280,8 +278,6 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		// Space for page table
 		as->data_pt = kmalloc(sizeof(paddr_t) * npages);
 		if (as->text_pt == NULL) return ENOMEM;
-
-		as->data_seg->npages = npages;
 
 		// Initialize the page table
 		for(size_t i = 0; i < npages; i++){
@@ -365,7 +361,6 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 
 	*stackptr = USERSTACK;
 	return 0;
-
 
 	#else
 	(void)as;

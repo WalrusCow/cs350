@@ -47,6 +47,6 @@ coremaps_free(paddr_t paddr);
 void
 coremaps_as_free(struct addrspace* as);
 
-#endif /* OPT-A3 */
+#endif /* OPT_A3 */
 
 #endif /* _COREMAP_H_ */

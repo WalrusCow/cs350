@@ -26,10 +26,4 @@ struct segment* get_segment(seg_type type, struct addrspace* as);
 struct segment* seg_create(seg_type type, off_t offset, size_t filesz,
 		size_t memsz, vaddr_t vbase);
 
-/*
- * get the number of pages in one segment
- */
-unsigned int seg_npages(seg_type type, struct addrspace* as);
-
 #endif /* _SEGMENTS_H_ */
-
