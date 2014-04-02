@@ -168,4 +168,26 @@ get_pt(seg_type type, struct addrspace* as) {
 	return NULL;
 }
 
+/*
+ * Invalid one entry in the page table
+ */
+void pt_invalid(vaddr_t vaddr, struct addrspace* as){
+
+	//get the table
+	seg_type type;
+	get_seg_type(vaddr, as, &type);
+
+        struct segment* seg = get_segment(type, as);
+        paddr_t* pageTable = get_pt(type, as);
+
+        // Index in the page table
+        int index = (vaddr - seg->vbase) / PAGE_SIZE;
+
+	//invalid that entry
+	paddr_t paddr = pageTable[index];
+	paddr &= ~(PT_VALID);
+	pageTable[index] = paddr;
+
+}
+
 #endif /* OPT-A3 */
