@@ -1,3 +1,4 @@
+#include "opt-A3.h"
 #if OPT_A3
 #include <coremap.h>
 #include <types.h>
@@ -10,6 +11,7 @@
 #include <current.h>
 #include <uw-vmstats.h>
 #include <segments.h>
+#include <synch.h>
 
 static paddr_t coremaps_base;
 static paddr_t coremaps_end;
@@ -26,7 +28,7 @@ static int coremaps_get_rr_victim(void){
         int victim;
 
         victim = next_victim;
-        next_victim = (next_victim + 1) % coremaps_napges;
+        next_victim = (next_victim + 1) % coremaps_npages;
         return victim;
 
 }
@@ -36,7 +38,7 @@ static int coremaps_get_rr_victim(void){
  */
 void coremaps_lock_init(){
 	if(coremaps_lock == NULL){
-		coresmap_lock = lock_create("coremaps_lock");
+		coremaps_lock = lock_create("coremaps_lock");
 		if(coremaps_lock == NULL){
 			panic("coremaps_lock created failed\n");
 		}
@@ -71,7 +73,7 @@ void coremaps_init(){
 	coremaps_base *= PAGE_SIZE;
 
 	//update the number of frames in the memory
-	coremaps_napges = (coremaps_end - coremaps_base) / PAGE_SIZE;
+	coremaps_npages = (coremaps_end - coremaps_base) / PAGE_SIZE;
 
 	//initialze the coremaps
 	for(int i = 0; i < coremaps_npages; i++){
@@ -93,10 +95,10 @@ coremaps_getppages(unsigned long npages, struct addrspace* as, vaddr_t vaddr){
 	//allocate 1 page
 	if(npages == 1){
 		//if there exits free pages in the memory
-		for(int i = 0; i < coremaps_npages; i++){
+		for(unsigned int i = 0; i < coremaps_npages; i++){
 			if(coremaps[i].free == true){
 				coremaps[i].cm_as = as;
-				coremasp[i].cm_vaddr = vaddr;
+				coremaps[i].cm_vaddr = vaddr;
 				coremaps[i].free = false;
 				paddr_t paddr;
 				paddr = i * PAGE_SIZE + coremaps_base;
@@ -120,12 +122,12 @@ coremaps_getppages(unsigned long npages, struct addrspace* as, vaddr_t vaddr){
 
 		//free this physical page first
 		paddr_t paddr = index * PAGE_SIZE + coremaps_base;
-		coremaps_free(paddr_t paddr);
+		coremaps_free(paddr);
 
 		//allocate the page
 		coremaps[index].cm_as = as;
 		coremaps[index].cm_vaddr = vaddr;
-		cpremaps[index].free = false;
+		coremaps[index].free = false;
 
 		as_zero_region(paddr, 1);
 		return paddr;
@@ -137,7 +139,7 @@ coremaps_getppages(unsigned long npages, struct addrspace* as, vaddr_t vaddr){
 		unsigned int block_size = 0;
 		unsigned int block_index = 0;
 		//free page exist
-		for(int i = 0; i < coremaps_npages; i++){
+		for(unsigned int i = 0; i < coremaps_npages; i++){
 			if(coremaps[i].free == true){
 				//the free pages are consecutive
 				if(block_index == i - 1){
@@ -150,8 +152,8 @@ coremaps_getppages(unsigned long npages, struct addrspace* as, vaddr_t vaddr){
 						//allocate pages
 						int n = (int)npages;
 						while(n != 0){
-							coremaps[index].as = as;
-							coremaps[index].paddr = paddr;
+							coremaps[index].cm_as = as;
+							coremaps[index].cm_paddr = paddr;
 							coremaps[index].free = false;
 							coremaps[index].n = n;
 							index = (index + 1) % coremaps_npages;
@@ -166,7 +168,7 @@ coremaps_getppages(unsigned long npages, struct addrspace* as, vaddr_t vaddr){
 				}
 				else{
 					block_index = i;
-					blosck_size = 0;
+					block_size = 0;
 				}
 			}
 		}
@@ -177,7 +179,7 @@ coremaps_getppages(unsigned long npages, struct addrspace* as, vaddr_t vaddr){
 
 		//may be in the middle of a block
 		if(coremaps[start_index].n != 0){
-			while(coremaps[index].n != 1){
+			while(coremaps[start_index].n != 1){
 				start_index = coremaps_get_rr_victim();
 			}
 			start_index = coremaps_get_rr_victim();
@@ -188,7 +190,7 @@ coremaps_getppages(unsigned long npages, struct addrspace* as, vaddr_t vaddr){
 
 		//may be in the middle of a block
 		if(coremaps[end_index].n != 0){
-			while(coremaps[index].n != 1){
+			while(coremaps[end_index].n != 1){
 				end_index = coremaps_get_rr_victim();
 			}
 			end_index = coremaps_get_rr_victim();
@@ -241,7 +243,7 @@ coremaps_free(paddr_t paddr){
 	lock_acquire(coremaps_lock);
 
 	//find the index first
-	int index = (paddr - coremaps_base) / PAGE_SIZE;
+	unsigned int index = (paddr - coremaps_base) / PAGE_SIZE;
 
 	//only free the pages in coremap
 	if((index >= 0) && (index < coremaps_npages)){
@@ -312,7 +314,7 @@ coremaps_as_free(struct addrspace* as){
 	for(int i = 0; i < stack_npages; i++){
 		paddr_t paddr = stack_pt[i];
 		if(paddr & PT_VALID){
-			corempas_free(paddr & PAGE_FRAME);
+			coremaps_free(paddr & PAGE_FRAME);
 		}
 	}
 }
