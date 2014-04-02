@@ -167,7 +167,8 @@ as_destroy(struct addrspace *as)
 {
 
 	#if OPT_A3
-	vfs_close(as->as_vn); // no more load elf
+	// Close the vnode (the same as VOP_DECREF and VOP_DECOPEN)
+	vfs_close(as->as_vn);
 
 	kfree(as->text_pt);
 	kfree(as->data_pt);

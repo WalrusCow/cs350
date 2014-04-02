@@ -12,13 +12,12 @@
 #include <uio.h>
 #include <vnode.h>
 #include <uw-vmstats.h>
+#include <mips/vm.h>
 
 /*
  * get the corresponding physical address by passing in a virtual address
  */
-
-int
-pt_getEntry(vaddr_t vaddr, paddr_t* paddr, int* segment_type){
+int pt_getEntry(vaddr_t vaddr, paddr_t* paddr, int* segment_type){
 
 	struct addrspace *as;
 
@@ -54,7 +53,7 @@ pt_getEntry(vaddr_t vaddr, paddr_t* paddr, int* segment_type){
  */
 
 int
-pt_setEntry(vaddr_t vaddr, paddr_t paddr, bool written){
+pt_setEntry(vaddr_t vaddr, paddr_t paddr) {
 	struct addrspace *as;
 
 	// we only care the page number and frame number
@@ -70,9 +69,8 @@ pt_setEntry(vaddr_t vaddr, paddr_t paddr, bool written){
 		return EFAULT;
 	}
 
-	//allocate the physical address for a page, this page is valid
+	// We just allocated it, so this is obviously valid
 	paddr |= PT_VALID;
-	if (written) paddr |= PT_WRITTEN;
 
 	vaddr_t base_vaddr;
 	int segType;
@@ -91,10 +89,11 @@ pt_setEntry(vaddr_t vaddr, paddr_t paddr, bool written){
 
 }
 
-/* use VOP_READ to load a page
-*/
+/*
+ * use VOP_READ to load a page
+ */
 int
-pt_loadPage(vaddr_t vaddr, struct addrspace *as, int segment_type){
+pt_loadPage(vaddr_t vaddr, paddr_t paddr, struct addrspace *as, int segment_type) {
 	// Size to read
 	size_t readsize;
 	// Number of bytes left in the segment
@@ -113,12 +112,18 @@ pt_loadPage(vaddr_t vaddr, struct addrspace *as, int segment_type){
 		case 0: // Text
 			seg_offset = vaddr - as->as_vbase1;
 			file_offset = seg_offset + as->as_vbase1_offset;
-			bytes_left = (as->as_vbase1_filesize - seg_offset);
+			if (seg_offset > as->as_vbase1_filesize)
+				bytes_left = 0;
+			else
+				bytes_left = (as->as_vbase1_filesize - seg_offset);
 			break;
 		case 1: // Data
 			seg_offset = vaddr - as->as_vbase2;
 			file_offset = seg_offset + as->as_vbase2_offset;
-			bytes_left = (as->as_vbase2_filesize - seg_offset);
+			if (seg_offset > as->as_vbase2_filesize)
+				bytes_left = 0;
+			else
+				bytes_left = (as->as_vbase2_filesize - seg_offset);
 			break;
 		default:
 			// Unknown segment type
@@ -133,60 +138,35 @@ pt_loadPage(vaddr_t vaddr, struct addrspace *as, int segment_type){
 
 	struct iovec iov;
 	struct uio u;
-	int result;
 
-	iov.iov_ubase = (userptr_t)vaddr; // start of vaddrs
-	iov.iov_len = PAGE_SIZE;		 // length of the memory space
+	if (readsize == 0) {
+		return 0;
+	}
 
-	u.uio_iov = &iov;
-	u.uio_iovcnt = 1;
-	u.uio_resid = readsize;          // amount to read from the file
-	u.uio_offset = file_offset; // Offset into the file to begin reading at
-	// Only executable if in text segment
-	u.uio_segflg = segment_type ? UIO_USERSPACE : UIO_USERISPACE;
-	u.uio_rw = UIO_READ;
-	u.uio_space = as;
+	/*
+	 * We are pretending that we are writing to kernel space even though
+	 * we're writing to the physical address of a user space virtual address.
+	 * This is a bit of a hack, but it is necessary so that we can't TLB fault
+	 * in this function, since this is called from within the fault
+	 * handler itself.
+	 */
 
-	result = VOP_READ(as->as_vn, &u);
+	void* kvaddr = (void*)PADDR_TO_KVADDR(paddr);
+	uio_kinit(&iov, &u, kvaddr, readsize, file_offset, UIO_READ);
+
+	int result = VOP_READ(as->as_vn, &u);
 	if (result) {
 		return result;
 	}
 
+	// TODO: Is this warning valid? Use GDB to find out..
 	if (u.uio_resid != 0) {
 		/* short read; problem with executable? */
 		kprintf("ELF: short read on segment - file truncated?\n");
 		return ENOEXEC;
 	}
 
-	/*
-	 * If memsize > filesize, the remaining space should be
-	 * zero-filled. There is no need to do this explicitly,
-	 * because the VM system should provide pages that do not
-	 * contain other processes' data, i.e., are already zeroed.
-	 *
-	 * During development of your VM system, it may have bugs that
-	 * cause it to (maybe only sometimes) not provide zero-filled
-	 * pages, which can cause user programs to fail in strange
-	 * ways. Explicitly zeroing program BSS may help identify such
-	 * bugs, so the following disabled code is provided as a
-	 * diagnostic tool. Note that it must be disabled again before
-	 * you submit your code for grading.
-	 */
-#if 0
-	{
-		size_t fillamt;
-
-		fillamt = memsize - filesize;
-		if (fillamt > 0) {
-			DEBUG(DB_EXEC, "ELF: Zero-filling %lu more bytes\n", 
-			      (unsigned long) fillamt);
-			u.uio_resid += fillamt;
-			result = uiomovezeros(fillamt, &u);
-		}
-	}
-#endif
-	
-	return result;
+	return 0;
 }
 
 /*
@@ -205,6 +185,7 @@ pt_getTable(vaddr_t vaddr, struct addrspace* as, int* segType, vaddr_t* vbase) {
 	KASSERT((as->as_vbase2 & PAGE_FRAME) == as->as_vbase2);
 
 	KASSERT(segType); // Not NULL, please
+	KASSERT(vbase); // Not NULL, please
 
 	// All the virtual addresses
 	vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
@@ -219,21 +200,21 @@ pt_getTable(vaddr_t vaddr, struct addrspace* as, int* segType, vaddr_t* vbase) {
 
 	// vaddr is from text segment
 	if(vaddr >= vbase1 && vaddr < vtop1){
-		*vbase = vaddr - vbase1;
+		*vbase = vbase1;
 		*segType = 0;
 		return as->text_pt;
 	}
 
 	// vaddr is from data segment
 	else if(vaddr >= vbase2 && vaddr < vtop2){
-		*vbase = vaddr - vbase2;
+		*vbase = vbase2;
 		*segType = 1;
 		return as->data_pt;
 	}
 
 	// vaddr is from stack
 	else if(vaddr >= stackbase && vaddr < stacktop){
-		*vbase = vaddr - stackbase;
+		*vbase = stackbase;
 		*segType = 2;
 		return as->stack_pt;
 	}
