@@ -22,7 +22,11 @@
 #include <mips/tlb.h>
 #include <uw-vmstats.h>
 #include <pt.h>
+#include <coremap.h>
 #include <segments.h>
+
+//recored is the coremap set up
+static bool coremap_set_up = false;
 
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
@@ -59,7 +63,9 @@ void
 vm_bootstrap(void)
 {
 	#if OPT_A3
-	/* May need to add code. */
+	//initialize coremap
+	coremaps_init();
+	coremap_set_up = true;
 	#endif /* OPT-A3 */
 }
 
@@ -69,9 +75,17 @@ alloc_kpages(int npages)
 {
 	#if OPT_A3
 	paddr_t pa;
-	pa = getppages(npages);
+	//before coremap set up
+	if(coremap_set_up == false){
+		pa = getppages(npages);
+	}
+	//after coremap set up
+	else{
+		//for kernel, no address space
+		pa = coremaps_getppages(npages, NULL, 0);
+	}
 	if (pa==0) {
-			return 0;
+		return 0;
 	}
 	return PADDR_TO_KVADDR(pa);
 	#else
@@ -86,9 +100,8 @@ void
 free_kpages(vaddr_t addr)
 {
 	#if OPT_A3
-	/* nothing - leak the memory. */
-
-	(void)addr;
+	//free page
+	coremaps_free(addr);
 	#else
 	/* nothing - leak the memory. */
 
@@ -152,12 +165,10 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	// get the paddr
 	result = pt_getEntry(faultaddress, &paddr);
 
-
 	if((paddr & PT_VALID) == 0){
 		newPage = true;
 		// Not loaded in page table yet - load it up
-		paddr = getppages(1); // new physical page
-		as_zero_region(paddr, 1); // Zero it (TODO: this belongs in getppages)
+		paddr = coremaps_getppages(1, as, faultaddress); // new physical page
 
 		// Update page table with this vaddr
 		result = pt_setEntry(faultaddress, paddr);

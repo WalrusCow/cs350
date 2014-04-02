@@ -45,6 +45,7 @@
 #include <uw-vmstats.h>
 #include <pt.h>
 #include <vfs.h>
+#include <coremap.h>
 
 void
 as_zero_region(paddr_t paddr, unsigned npages)
@@ -142,10 +143,6 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		return ENOMEM;
 	}
 
-	/*
-	 * Write this.
-	 */
-
 	(void)old;
 	
 	*ret = newas;
@@ -160,6 +157,9 @@ as_destroy(struct addrspace *as)
 	#if OPT_A3
 	// Close the vnode (this was opened at runtime by runprogram)
 	vfs_close(as->as_vn);
+
+	//free all used physical memory
+	coremaps_as_free(as);
 
 	// Paranoia: Check all sub-elements
 	if (as->text_seg != NULL) kfree(as->text_seg);
@@ -227,13 +227,7 @@ as_deactivate(void)
 as_dectivate(void)
 #endif
 {
-
 	#if OPT_A3
-
-	/*
-	 * Write this. For many designs it won't need to actually do
-	 * anything.
-	 */
 	#endif /* OPT-A3 */
 }
 
@@ -363,10 +357,10 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	as->stack_seg->file_offset = 0;
 	as->stack_seg->vtop = USERSTACK;
 	as->stack_seg->vbase = STACK_BASE;
+	as->stack_seg->npages = VM_STACKPAGES;
 
 	*stackptr = USERSTACK;
 	return 0;
-
 
 	#else
 	(void)as;

@@ -13,6 +13,7 @@ struct segment {
 	vaddr_t vbase;
 	vaddr_t vtop;
 	seg_type type;
+	unsigned int npages;
 };
 
 // Get the type of the vaddr, return error if invalid vaddr

@@ -55,6 +55,7 @@ seg_create(seg_type type, off_t offset, size_t filesz, size_t sz,
 	seg->type = type;
 	seg->filesize = filesz;
 	seg->file_offset = offset;
+	seg->npages = (seg->vtop - seg->vbase) / PAGE_SIZE;
 
 	return seg;
 }
