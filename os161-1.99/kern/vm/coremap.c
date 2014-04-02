@@ -244,7 +244,7 @@ coremaps_free(paddr_t paddr){
 	int index = (paddr - coremaps_base) / PAGE_SIZE;
 
 	//only free the pages in coremap
-	if((index >= 0) && (index < coremaps_end)){
+	if((index >= 0) && (index < coremaps_npages)){
 		struct addrspace * as = coremaps[index].cm_as;
 		vaddr_t vaddr = coremaps[index].cm_vaddr;
 		int n = coremaps[index].n;
