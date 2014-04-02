@@ -37,7 +37,7 @@ static int coremaps_get_rr_victim(void){
  */
 void coremaps_lock_init(){
 	if(coremaps_lock == NULL){
-		coresmap_lock = lock_create("coremaps_lock");
+		coremaps_lock = lock_create("coremaps_lock");
 		if(coremaps_lock == NULL){
 			panic("coremaps_lock created failed\n");
 		}
@@ -94,10 +94,10 @@ coremaps_getppages(unsigned long npages, struct addrspace* as, vaddr_t vaddr){
 	//allocate 1 page
 	if(npages == 1){
 		//if there exits free pages in the memory
-		for(int i = 0; i < coremaps_npages; i++){
+		for(unsigned int i = 0; i < coremaps_npages; i++){
 			if(coremaps[i].free == true){
 				coremaps[i].cm_as = as;
-				coremasp[i].cm_vaddr = vaddr;
+				coremaps[i].cm_vaddr = vaddr;
 				coremaps[i].free = false;
 				paddr_t paddr;
 				paddr = i * PAGE_SIZE + coremaps_base;
@@ -121,12 +121,12 @@ coremaps_getppages(unsigned long npages, struct addrspace* as, vaddr_t vaddr){
 
 		//free this physical page first
 		paddr_t paddr = index * PAGE_SIZE + coremaps_base;
-		coremaps_free(paddr_t paddr);
+		coremaps_free(paddr);
 
 		//allocate the page
 		coremaps[index].cm_as = as;
 		coremaps[index].cm_vaddr = vaddr;
-		cpremaps[index].free = false;
+		coremaps[index].free = false;
 
 		as_zero_region(paddr, 1);
 		return paddr;
@@ -151,8 +151,8 @@ coremaps_getppages(unsigned long npages, struct addrspace* as, vaddr_t vaddr){
 						//allocate pages
 						size_t n = npages;
 						while(n != 0){
-							coremaps[index].as = as;
-							coremaps[index].paddr = paddr;
+							coremaps[index].cm_as = as;
+							coremaps[index].cm_paddr = paddr;
 							coremaps[index].free = false;
 							coremaps[index].n = n;
 							index = (index + 1) % coremaps_npages;
@@ -167,7 +167,7 @@ coremaps_getppages(unsigned long npages, struct addrspace* as, vaddr_t vaddr){
 				}
 				else{
 					block_index = i;
-					blosck_size = 0;
+					block_size = 0;
 				}
 			}
 		}
@@ -178,7 +178,7 @@ coremaps_getppages(unsigned long npages, struct addrspace* as, vaddr_t vaddr){
 
 		//may be in the middle of a block
 		if(coremaps[start_index].n != 0){
-			while(coremaps[index].n != 1){
+			while(coremaps[start_index].n != 1){
 				start_index = coremaps_get_rr_victim();
 			}
 			start_index = coremaps_get_rr_victim();
@@ -189,7 +189,7 @@ coremaps_getppages(unsigned long npages, struct addrspace* as, vaddr_t vaddr){
 
 		//may be in the middle of a block
 		if(coremaps[end_index].n != 0){
-			while(coremaps[index].n != 1){
+			while(coremaps[end_index].n != 1){
 				end_index = coremaps_get_rr_victim();
 			}
 			end_index = coremaps_get_rr_victim();
@@ -242,10 +242,10 @@ coremaps_free(paddr_t paddr){
 	lock_acquire(coremaps_lock);
 
 	//find the index first
-	int index = (paddr - coremaps_base) / PAGE_SIZE;
+	unsigned int index = (paddr - coremaps_base) / PAGE_SIZE;
 
 	//only free the pages in coremap
-	if((index >= 0) && (index < coremaps_end)){
+	if((index >= 0) && (index < coremaps_npages)){
 		struct addrspace * as = coremaps[index].cm_as;
 		vaddr_t vaddr = coremaps[index].cm_vaddr;
 		int n = coremaps[index].n;
