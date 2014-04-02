@@ -67,14 +67,14 @@ as_create(void)
 	#if OPT_A3
 
 	struct addrspace *as = kmalloc(sizeof(struct addrspace));
-	if (as==NULL) {
-			return NULL;
+	if (as == NULL) {
+		return NULL;
 	}
 
-	as->as_vbase1 = 0;
-	as->as_npages1 = 0;
-	as->as_vbase2 = 0;
-	as->as_npages2 = 0;
+	// Segments
+	as->text_seg = NULL;
+	as->data_seg = NULL;
+	as->stack_seg = NULL;
 
 	//page table
 	as->text_pt = NULL;
@@ -83,12 +83,6 @@ as_create(void)
 
 	//vnode
 	as->as_vn = NULL;
-	
-	as->as_vbase1_offset = 0;
-	as->as_vbase2_offset = 0;
-	
-	as->as_vbase1_filesize = 0;
-	as->as_vbase2_filesize = 0;
 
 	return as;
 
@@ -120,10 +114,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		return ENOMEM;
 	}
 
-	new->as_vbase1 = old->as_vbase1;
-	new->as_npages1 = old->as_npages1;
-	new->as_vbase2 = old->as_vbase2;
-	new->as_npages2 = old->as_npages2;
+	// TODO
 
 	/* (Mis)use as_prepare_load to allocate some physical memory. */
 	if (as_prepare_load(new)) {
@@ -134,9 +125,9 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	//copy the vnode and page table in the address space
 	// TODO: increment references
 	new->as_vn = old->as_vn;
-	new->text_pt = kmalloc(sizeof(paddr_t) * new->as_npages1);
-	new->data_pt = kmalloc(sizeof(paddr_t) * new->as_npages2);
-	new->stack_pt = NULL; // TODO: Do we kmalloc here?
+	//new->text_pt = kmalloc(sizeof(paddr_t) * new->as_npages1);
+	//new->data_pt = kmalloc(sizeof(paddr_t) * new->as_npages2);
+	//new->stack_pt = NULL; // TODO: Do we kmalloc here?
 
 	//Do the deep copy? what about stack? use memmove?
 
@@ -170,8 +161,13 @@ as_destroy(struct addrspace *as)
 	// Close the vnode (the same as VOP_DECREF and VOP_DECOPEN)
 	vfs_close(as->as_vn);
 
-	kfree(as->text_pt);
-	kfree(as->data_pt);
+	// Paranoia: Check all sub-elements
+	if (as->text_seg != NULL) kfree(as->text_seg);
+	if (as->data_seg != NULL) kfree(as->data_seg);
+	if (as->stack_seg != NULL) kfree(as->stack_seg);
+
+	if (as->text_pt != NULL) kfree(as->text_pt);
+	if (as->data_pt != NULL) kfree(as->data_pt);
 	if (as->stack_pt != NULL) kfree(as->stack_pt);
 	kfree(as);
 
@@ -257,8 +253,6 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 {
 
 	#if OPT_A3
-	size_t npages;
-
 	// Set up the flags that we will be using
 	int flags = 0;
 	if (readable) flags |= PT_READ;
@@ -272,35 +266,29 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 	/* ...and now the length. */
 	sz = (sz + PAGE_SIZE - 1) & PAGE_FRAME;
 
-	npages = sz / PAGE_SIZE;
+	size_t npages = sz / PAGE_SIZE;
 
-	if (as->as_vbase1 == 0) {
-		as->as_vbase1 = vaddr;
+	if (as->text_pt == NULL) {
+		// Space for page table
+		as->text_pt = kmalloc(sizeof(paddr_t) * npages);
+		if (as->text_pt == NULL) return ENOMEM;
 
-		//malloc the space for the text segment page table
-		as->text_pt = kmalloc(sizeof(paddr_t) * (npages));
-
-		//initialize the page table
+		// Initialize the page table
 		for(size_t i = 0; i < npages; i++){
 			as->text_pt[i] = flags;
 		}
-
-		as->as_npages1 = npages;
 		return 0;
 	}
 
-	if (as->as_vbase2 == 0) {
-		as->as_vbase2 = vaddr;
+	if (as->data_pt == NULL) {
+		// Space for page table
+		as->data_pt = kmalloc(sizeof(paddr_t) * npages);
+		if (as->text_pt == NULL) return ENOMEM;
 
-		//malloc the space for the data segment page table
-		as->data_pt = kmalloc(sizeof(paddr_t) * (npages));
-
-		//initialize the page table
+		// Initialize the page table
 		for(size_t i = 0; i < npages; i++){
 			as->data_pt[i] = flags;
 		}
-
-		as->as_npages2 = npages;
 		return 0;
 	}
 
@@ -360,8 +348,21 @@ int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
 	#if OPT_A3
-	// TODO: Do we need to load a stack page right away?
-	as->stack_pt = kmalloc(DUMBVM_STACKPAGES * sizeof(paddr_t));
+	as->stack_pt = kmalloc(VM_STACKPAGES * sizeof(paddr_t));
+	if (as->stack_pt == NULL) return ENOMEM;
+
+	as->stack_seg = kmalloc(sizeof(struct segment));
+	if (as->stack_seg == NULL) return ENOMEM;
+
+	// Initialize a special "segment". Note that this isn't really
+	// a segment, because it doesn't live in the ELF file.
+	// However, treating it as such simplifies a bunch of code nicely,
+	// so we will do that.
+	as->stack_seg->type = STACK;
+	as->stack_seg->filesize = 0;
+	as->stack_seg->file_offset = 0;
+	as->stack_seg->vtop = USERSTACK;
+	as->stack_seg->vbase = STACK_BASE;
 
 	*stackptr = USERSTACK;
 	return 0;
@@ -372,7 +373,7 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 
 	/* Initial user-level stack pointer */
 	*stackptr = USERSTACK;
-	
+
 	return 0;
 	#endif
 }

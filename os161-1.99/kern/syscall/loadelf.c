@@ -59,11 +59,12 @@
 #include <addrspace.h>
 #include <vnode.h>
 #include <elf.h>
+
 #include "opt-A3.h"
 
 #if OPT_A3
-
-#endif
+#include <segments.h>
+#endif /* OPT_A3 */
 
 /*
  * Load a segment at virtual address VADDR. The segment in memory
@@ -90,7 +91,7 @@ because we need those for page fault later
 */
 static
 int
-prepare_page(struct addrspace *as, struct vnode *v,
+prepare_segment(struct addrspace *as, struct vnode *v,
 	     off_t offset, vaddr_t vaddr,
 	     size_t memsize, size_t filesize) {
 
@@ -99,10 +100,6 @@ prepare_page(struct addrspace *as, struct vnode *v,
 		filesize = memsize;
 	}
 
-	(void) vaddr; // already saved as vbase1 or vbase2
-
-	// memsize is used to calculate npages
-	// TODO: Where do we allocate the actual page table?
 	if(as->as_vn == NULL){
 		// We must increase the references, since we will be reading this later
 		// and if it closes that is bad
@@ -111,21 +108,19 @@ prepare_page(struct addrspace *as, struct vnode *v,
 		as->as_vn = v;
 	}
 
-	if(as->as_vbase1_filesize == 0){
-		as->as_vbase1_offset = offset;
-		as->as_vbase1_filesize = filesize;
+	if (as->text_seg == NULL) {
+		as->text_seg = seg_create(TEXT, offset, filesize, memsize, vaddr);
 		return 0;
 	}
-	if(as->as_vbase2_filesize == 0){
-		as->as_vbase2_offset = offset;
-		as->as_vbase2_filesize = filesize;
+	if (as->data_seg == NULL) {
+		as->data_seg = seg_create(DATA, offset, filesize, memsize, vaddr);
 		return 0;
 	}
 
 	/*
 	 * Support for more than two regions is not available.
 	 */
-	kprintf("dumbvm: Warning: too many regions\n");
+	kprintf("vm: Warning: too many regions\n");
 	return EUNIMP;
 }
 #endif
@@ -276,9 +271,10 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 			return ENOEXEC;
 		}
 
+		// TODO: Combine this and as_define_region
 		// assume for now that vnode will remain open until we exit
 		// originally load segment
-		result = prepare_page(as, v, ph.p_offset, ph.p_vaddr,
+		result = prepare_segment(as, v, ph.p_offset, ph.p_vaddr,
 				      ph.p_memsz, ph.p_filesz);
 		if (result) {
 			return result;

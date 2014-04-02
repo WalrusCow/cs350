@@ -22,6 +22,7 @@
 #include <mips/tlb.h>
 #include <uw-vmstats.h>
 #include <pt.h>
+#include <segments.h>
 
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
@@ -63,7 +64,7 @@ vm_bootstrap(void)
 }
 
 /* Allocate/free some kernel-space virtual pages */
-vaddr_t 
+vaddr_t
 alloc_kpages(int npages)
 {
 	#if OPT_A3
@@ -81,7 +82,7 @@ alloc_kpages(int npages)
 	#endif /* OPT-A3 */
 }
 
-void 
+void
 free_kpages(vaddr_t addr)
 {
 	#if OPT_A3
@@ -141,14 +142,16 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		return EFAULT;
 	}
 
-	int segment_type;
+	seg_type segment_type;
+	int result = get_seg_type(faultaddress, as, &segment_type);
+	if (result) return result;
+
 	// True if the page is a new one (wasn't in page table)
 	bool newPage = false;
 
 	// get the paddr
-	int result = pt_getEntry(faultaddress, &paddr, &segment_type);
+	result = pt_getEntry(faultaddress, &paddr);
 
-	if(result) return result;
 
 	if((paddr & PT_VALID) == 0){
 		newPage = true;
@@ -167,9 +170,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		}
 	}
 	else {
-		// Keep track of previous
 		vmstats_inc(VMSTAT_TLB_RELOAD);
-
 		// Get the actual *address* and ignore the flags from page table
 		paddr &= PAGE_FRAME;
 	}
@@ -183,7 +184,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	tlb_hi = faultaddress;
 	tlb_lo = paddr | TLBLO_VALID;
 	// Text segment is not writeable
-	if (segment_type != 0) tlb_lo |= TLBLO_DIRTY;
+	if (segment_type != TEXT) tlb_lo |= TLBLO_DIRTY;
 
 	// Insert into the tlb (choose the index for us)
 	tlb_insert(tlb_hi, tlb_lo);
