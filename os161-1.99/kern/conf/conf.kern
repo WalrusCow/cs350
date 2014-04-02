@@ -339,6 +339,7 @@ file      vm/kmalloc.c
 defoption vm
 optfile   vm   vm/vm.c
 optfile   vm   vm/pt.c
+optfile   vm   vm/segments.c
 optofffile dumbvm   vm/addrspace.c
 
 
