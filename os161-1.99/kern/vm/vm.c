@@ -22,6 +22,7 @@
 #include <mips/tlb.h>
 #include <uw-vmstats.h>
 #include <pt.h>
+#include <coremap.h>
 
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
@@ -58,7 +59,7 @@ void
 vm_bootstrap(void)
 {
 	#if OPT_A3
-	/* May need to add code. */
+	coremaps_init();
 	#endif /* OPT-A3 */
 }
 
@@ -205,7 +206,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	}
 
 	// Insert into the tlb (choose the index for us)
-	int index = tlb_insert(tlb_hi, tlb_lo);
+	tlb_insert(tlb_hi, tlb_lo);
 
 	if (newPage) {
 		// Load the page into memory - it is a new page
@@ -227,9 +228,10 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 			pt_setEntry(faultaddress, paddr, true);
 
 			// Find index of the vaddr thing
-			index = tlb_probe(tlb_hi, 0);
+//			index = tlb_probe(tlb_hi, 0);
 			tlb_lo &= ~TLBLO_DIRTY;
-			tlb_write(tlb_hi, tlb_lo, index);
+//			tlb_write(tlb_hi, tlb_lo, index);
+			tlb_insert(tlb_hi, tlb_lo);
 			splx(spl);
 			return 0;
 		}
@@ -258,6 +260,12 @@ tlb_insert(uint32_t tlb_hi, uint32_t tlb_lo) {
 	int index;
 	// No interrupts while messing with TLB
 	int spl = splhigh();
+
+	index = tlb_probe(tlb_hi, 0);
+	if(index >= 0){
+		tlb_write(tlb_hi, tlb_lo, index);
+		return index;
+	}
 
 	//if there exists free TLB entry
 	for (index = 0; index < NUM_TLB; index++) {

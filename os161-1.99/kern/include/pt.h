@@ -23,4 +23,8 @@ pt_loadPage(vaddr_t vaddr, struct addrspace *as, int segment_type);
 paddr_t*
 pt_getTable(vaddr_t vaddr, struct addrspace* as, int* segType, vaddr_t* vbase);
 
+/*
+ * Invalid one entry in the page table
+ */
+void pt_invalid(struct addrspace* as, vaddr_t vaddr);
 #endif /* OPT-A3 */

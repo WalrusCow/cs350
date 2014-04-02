@@ -45,6 +45,7 @@
 #include <uw-vmstats.h>
 #include <pt.h>
 #include <vfs.h>
+#include <coremap.c>
 
 void
 as_zero_region(paddr_t paddr, unsigned npages)
@@ -168,6 +169,10 @@ as_destroy(struct addrspace *as)
 
 	#if OPT_A3
 	vfs_close(as->as_vn); // no more load elf
+
+	//free all used physicall memory
+	coremaps_as_free(as);
+
 
 	kfree(as->text_pt);
 	kfree(as->data_pt);

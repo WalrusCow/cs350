@@ -56,6 +56,7 @@
 
 #if OPT_A3
 #include <uw-vmstats.h>
+#include <coremap.c>
 #endif
 /*
  * These two pieces of data are maintained by the makefiles and build system.
@@ -120,8 +121,10 @@ boot(void)
 	hardclock_bootstrap();
 	vfs_bootstrap();
 #if OPT_A3
-	//intial vmstats
+	//intialize vmstats
 	vmstats_init();
+	//intializa lock for coremaps
+	coremaps_lock_init();
 #endif /* OPT_A3 */
 
 	/* Probe and initialize devices. Interrupts should come on. */
