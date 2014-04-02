@@ -102,7 +102,12 @@ prepare_page(struct addrspace *as, struct vnode *v,
 	(void) vaddr; // already saved as vbase1 or vbase2
 
 	// memsize is used to calculate npages
+	// TODO: Where do we allocate the actual page table?
 	if(as->as_vn == NULL){
+		// We must increase the references, since we will be reading this later
+		// and if it closes that is bad
+		VOP_INCREF(v);
+		VOP_INCOPEN(v);
 		as->as_vn = v;
 	}
 
@@ -113,7 +118,7 @@ prepare_page(struct addrspace *as, struct vnode *v,
 	}
 	if(as->as_vbase2_filesize == 0){
 		as->as_vbase2_offset = offset;
-		as->as_vbase2_filesize =filesize;
+		as->as_vbase2_filesize = filesize;
 		return 0;
 	}
 
@@ -134,7 +139,7 @@ int
 load_elf(struct vnode *v, vaddr_t *entrypoint)
 {
 	// on stack, will be deallocated after;
-	
+
 	Elf_Ehdr eh;   /* Executable header */
 	Elf_Phdr ph;   /* "Program header" = segment header */
 	int result, i;
@@ -220,7 +225,7 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 		    case PT_MIPS_REGINFO: /* skip */ continue;
 		    case PT_LOAD: break;
 		    default:
-			kprintf("loadelf: unknown segment type %d\n", 
+			kprintf("loadelf: unknown segment type %d\n",
 				ph.p_type);
 			return ENOEXEC;
 		}
@@ -236,15 +241,15 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 	}
 
 	result = as_prepare_load(as); // does nothing for now (use to do the job of page table, getppages ->physical address)
-	
+
 	if (result) {
 		return result;
 	}
 
 	/*
-	 * Save resources necessary for actual load later 
+	 * Save resources necessary for actual load later
 	 */
-	 
+
 	for (i=0; i<eh.e_phnum; i++) {
 		off_t offset = eh.e_phoff + i*eh.e_phentsize;
 		uio_kinit(&iov, &ku, &ph, sizeof(ph), offset, UIO_READ);
@@ -273,9 +278,8 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 
 		// assume for now that vnode will remain open until we exit
 		// originally load segment
-		result = prepare_page(as, v, ph.p_offset, ph.p_vaddr, 
-				      ph.p_memsz, ph.p_filesz/*,
-				      ph.p_flags & PF_X*/); // pf_x is set when we initalize pt
+		result = prepare_page(as, v, ph.p_offset, ph.p_vaddr,
+				      ph.p_memsz, ph.p_filesz);
 		if (result) {
 			return result;
 		}

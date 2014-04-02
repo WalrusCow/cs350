@@ -112,12 +112,18 @@ pt_loadPage(vaddr_t vaddr, paddr_t paddr, struct addrspace *as, int segment_type
 		case 0: // Text
 			seg_offset = vaddr - as->as_vbase1;
 			file_offset = seg_offset + as->as_vbase1_offset;
-			bytes_left = (as->as_vbase1_filesize - seg_offset);
+			if (seg_offset > as->as_vbase1_filesize)
+				bytes_left = 0;
+			else
+				bytes_left = (as->as_vbase1_filesize - seg_offset);
 			break;
 		case 1: // Data
 			seg_offset = vaddr - as->as_vbase2;
 			file_offset = seg_offset + as->as_vbase2_offset;
-			bytes_left = (as->as_vbase2_filesize - seg_offset);
+			if (seg_offset > as->as_vbase2_filesize)
+				bytes_left = 0;
+			else
+				bytes_left = (as->as_vbase2_filesize - seg_offset);
 			break;
 		default:
 			// Unknown segment type
@@ -132,6 +138,10 @@ pt_loadPage(vaddr_t vaddr, paddr_t paddr, struct addrspace *as, int segment_type
 
 	struct iovec iov;
 	struct uio u;
+
+	if (readsize == 0) {
+		return 0;
+	}
 
 	/*
 	 * We are pretending that we are writing to kernel space even though
@@ -150,41 +160,13 @@ pt_loadPage(vaddr_t vaddr, paddr_t paddr, struct addrspace *as, int segment_type
 	}
 
 	// TODO: Is this warning valid? Use GDB to find out..
-	//if (u.uio_resid != 0) {
-	//	/* short read; problem with executable? */
-	//	kprintf("ELF: short read on segment - file truncated?\n");
-	//	return ENOEXEC;
-	//}
-
-	/*
-	 * If memsize > filesize, the remaining space should be
-	 * zero-filled. There is no need to do this explicitly,
-	 * because the VM system should provide pages that do not
-	 * contain other processes' data, i.e., are already zeroed.
-	 *
-	 * During development of your VM system, it may have bugs that
-	 * cause it to (maybe only sometimes) not provide zero-filled
-	 * pages, which can cause user programs to fail in strange
-	 * ways. Explicitly zeroing program BSS may help identify such
-	 * bugs, so the following disabled code is provided as a
-	 * diagnostic tool. Note that it must be disabled again before
-	 * you submit your code for grading.
-	 */
-#if 0
-	{
-		size_t fillamt;
-
-		fillamt = memsize - filesize;
-		if (fillamt > 0) {
-			DEBUG(DB_EXEC, "ELF: Zero-filling %lu more bytes\n", 
-			      (unsigned long) fillamt);
-			u.uio_resid += fillamt;
-			result = uiomovezeros(fillamt, &u);
-		}
+	if (u.uio_resid != 0) {
+		/* short read; problem with executable? */
+		kprintf("ELF: short read on segment - file truncated?\n");
+		return ENOEXEC;
 	}
-#endif
 
-	return result;
+	return 0;
 }
 
 /*
