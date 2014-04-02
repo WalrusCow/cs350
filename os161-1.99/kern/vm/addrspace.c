@@ -158,7 +158,7 @@ as_destroy(struct addrspace *as)
 {
 
 	#if OPT_A3
-	// Close the vnode (the same as VOP_DECREF and VOP_DECOPEN)
+	// Close the vnode (this was opened at runtime by runprogram)
 	vfs_close(as->as_vn);
 
 	// Paranoia: Check all sub-elements

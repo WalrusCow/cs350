@@ -101,10 +101,6 @@ prepare_segment(struct addrspace *as, struct vnode *v,
 	}
 
 	if(as->as_vn == NULL){
-		// We must increase the references, since we will be reading this later
-		// and if it closes that is bad
-		VOP_INCREF(v);
-		VOP_INCOPEN(v);
 		as->as_vn = v;
 	}
 
