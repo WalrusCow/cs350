@@ -10,20 +10,20 @@
 
 static paddr_t coremaps_base;
 static paddr_t coremaps_end;
-static unsigned int coremaps_npages;
+static unsigned int cm_npages;
 
 static struct coremap* coremaps;
 
 // lock for the coremaps, solve the synchronization problem
 static struct lock* coremaps_lock = NULL;
 
-// simple page replacement alogrithm
+// simple page replacement alogrithm (TODO)
 static size_t next_victim = 0;
-static size_t coremaps_get_rr_victim(void){
+static size_t cm_get_victim(void){
 	size_t victim;
 
 	victim = next_victim;
-	next_victim = (next_victim + 1) % coremaps_npages;
+	next_victim = (next_victim + 1) % cm_npages;
 	return victim;
 }
 
@@ -55,12 +55,12 @@ void coremaps_init(){
 	coremaps_end *= PAGE_SIZE;
 
 	// get the number of pages
-	coremaps_npages = (coremaps_end - coremaps_base) / PAGE_SIZE;
+	cm_npages = (coremaps_end - coremaps_base) / PAGE_SIZE;
 
 	// allocate the space for coremaps
 	coremaps = (struct coremap*)PADDR_TO_KVADDR(coremaps_base);
 
-	coremaps_base = coremaps_base + coremaps_npages * sizeof(struct coremap);
+	coremaps_base = coremaps_base + cm_npages * sizeof(struct coremap);
 
 	// update the base that can be used for paging
 	coremaps_base /= PAGE_SIZE;
@@ -68,150 +68,113 @@ void coremaps_init(){
 	coremaps_base *= PAGE_SIZE;
 
 	// update the number of frames in the memory
-	coremaps_npages = (coremaps_end - coremaps_base) / PAGE_SIZE;
+	cm_npages = (coremaps_end - coremaps_base) / PAGE_SIZE;
 
 	// initialze the coremaps
-	for(size_t i = 0; i < coremaps_npages; i++){
+	for(size_t i = 0; i < cm_npages; i++){
 		coremaps[i].free = true;
 		coremaps[i].cm_as = NULL;
 		coremaps[i].cm_vaddr = 0;
 		coremaps[i].npages = 0;
-		// Only set to false for kernel
-		coremaps[i].swappable = true;
 	}
 
 }
 
 /*
- * To get the pages from coremaps
+ * Return true if the page is swappable or free.
  */
-paddr_t
-coremaps_getppages(size_t npages, struct addrspace* as, vaddr_t vaddr) {
-	lock_acquire(coremaps_lock);
+static
+bool
+check_free_swap(struct coremap* pg) {
+	// Swappable if address space is not NULL
+	return (pg->cm_as != NULL) || pg->free;
+}
 
-	// Return address
-	paddr_t paddr;
+/*
+ * Return true if the page is free.
+ */
+static
+bool
+check_free(struct coremap* pg) {
+	return pg->free;
+}
 
-	// allocate 1 page
-	if (npages == 1) {
-		// if there exists free pages in the memory
-		for (size_t i = 0; i < coremaps_npages; i++) {
-			if (coremaps[i].free) {
-				coremaps[i].cm_as = as;
-				coremaps[i].cm_vaddr = vaddr;
-				coremaps[i].free = false;
-				coremaps[i].swappable = (as == NULL);
-				paddr = i * PAGE_SIZE + coremaps_base;
-				// zero the page
-				as_zero_region(paddr, 1);
-				lock_release(coremaps_lock);
-				return paddr;
-			}
-		}
+/*
+ * Find a contiguous region where all pages return true for
+ * the specified function. Return an error if no such region
+ * is found.
+ *
+ * Store the index of the start of the region in the pointer specified by
+ * `region_idx`.
+ *
+ * It searches beginning at startidx, and goes around up to twice.
+ * We go around twice (actually just starting at startidx until we go through
+ * the whole map *in order*) because otherwise we might miss a contiguous
+ * segment of the correct length that has `startidx` in its middle.
+ */
+static
+int
+cm_findRegion(size_t startidx, size_t len, size_t* region_idx,
+		bool (*check)(struct coremap*)) {
 
-		// page replacement
-		size_t index = coremaps_get_rr_victim();
+	KASSERT(region_idx);
 
-		// may be in the middle of a contiguous block
-		// TODO: Infinite loop check
-		while (!coremaps[index].swappable) {
-			index = coremaps_get_rr_victim();
-		}
-
-		// free this physical page first
-		// TODO: swap out this addr
-		paddr_t paddr = index * PAGE_SIZE + coremaps_base;
-		coremaps_free(paddr);
-
-		// allocate the page
-		coremaps[index].cm_as = as;
-		coremaps[index].cm_vaddr = vaddr;
-		coremaps[index].free = false;
-		coremaps[index].swappable = (as == NULL);
-
-		as_zero_region(paddr, 1);
-		lock_release(coremaps_lock);
-		return paddr;
-	}
-
-	// Allocate more than 1 page at one time
-
-	// First we search for a contiguous block of free pages
 	// Index that the free block starts at
 	size_t block_index = 0;
 	// Size of the free block discovered so far
 	size_t block_size = 0;
 
-	// free page exist
-	// TODO: Also track the *maximum* length free block, for more efficient
-	// swapping if there is no free block of the proper size
-	// TODO: Also when being smart consider moving pages around (but
-	// we cannot move part of a contiguous block)
-	for(size_t i = 0; i < coremaps_npages; i++){
-		// Not free page - reset the block
-		if (!coremaps[i].free) {
-			block_index = 0;
+	// We start looking at a specified index
+	size_t idx = startidx;
+
+	// Flag to indicate if we have wrapped around the map yet
+	bool wrap = false;
+
+	for(size_t i = 0; i < cm_npages || !wrap; ++i, idx = (idx + 1) % cm_npages){
+		// If we just wrapped around, then reset the block, because
+		// it must be contiguous memory :)
+		if (idx == 0) {
+			wrap = true;
 			block_size = 0;
+			block_index = 0;
+		}
+
+		// Not free page - reset the block and skip
+		if (!check(coremaps + idx)) {
+			block_size = 0;
+			block_index = 0;
 			continue;
 		}
 
 		// Another free page in a row
 		block_size += 1;
 		// Only update the start if this is the first free page
-		block_index = (block_index == 0) ? i : block_index;
+		block_index = (block_size == 1) ? idx : block_index;
 
 		// We have found a proper contiguous block!
-		if (block_size == npages) break;
-	}
-
-	if (block_size == npages) {
-		// If we found a contiguous block, allocate it and quit
-		for (size_t i = 0; i < block_size; ++i) {
-			// Allocate the page at block_index + i for this segment
-			coremaps[block_index + i].cm_as = as;
-			coremaps[block_index + i].cm_vaddr = vaddr;
-			coremaps[block_index + i].free = false;
-			// TODO: We will set to 0 for error checking
-			coremaps[block_index + i].npages = block_size;
-			coremaps[i].swappable = (as == NULL);
-
-			// Next page should have next page virtual address
-			vaddr += PAGE_SIZE;
+		if (block_size == len) {
+			*region_idx = block_index;
+			return 0;
 		}
-
-		// Special first one has npages equal to block size
-		// TODO: Once 0 for error checking this is relevant
-		coremaps[block_index].npages = block_size;
-
-		// Compute the physical address from the block start position
-		paddr = block_index * PAGE_SIZE + coremaps_base;
-		as_zero_region(paddr, npages);
-
-		lock_release(coremaps_lock);
-		return paddr;
 	}
+	return -1;
+}
 
-	// We did not find a contiguous free block of the correct size
-	// therefore, we must search for a block of the correct size made
-	// up of free pages or swappable pages (not kmalloc'd)
+/*
+ * Allocate a specified region.
+ * Swaps out all required pages in the specified region.
+ */
+static
+paddr_t
+cm_allocRegion(size_t idx, size_t len, struct addrspace* as, vaddr_t vaddr) {
+	for (size_t i = 0; i < len; ++i) {
+		KASSERT(idx + i < cm_npages);
 
-	// TODO: Do a loop like above BUT change the exit condition
-	// to be if free *OR* user space, since we cannot ever swap
-	// kernel pages out. If not found then error.
-	// ... we can pass in a check function!!! lol, this seems ugly either way
-
-	// TODO: looop like before!!!
-	block_size = 0;
-	block_index = coremaps_get_rr_victim();
-
-	// free all the frames between start index and end index
-	// TODO: Make this a function, with npages as arg (1 for top)
-	/*
-	 * NOTE: We have a contiguous block of non-kernel pages at this point
-	 */
-	for (size_t i = 0; i <= block_size; ++i) {
 		// Shorthand
-		struct coremap* page = coremaps + block_index + i;
+		struct coremap* page = coremaps + idx + i;
+		// Must be free or swappable
+		KASSERT(page->free || page->cm_as);
+
 		//if (!page.free) {
 		//	// TODO: Swap out
 		//}
@@ -220,19 +183,47 @@ coremaps_getppages(size_t npages, struct addrspace* as, vaddr_t vaddr) {
 		page->cm_as = as;
 		page->cm_vaddr = vaddr;
 		page->free = false;
-		// TODO: We will set to 0 for error checking
-		page->npages = block_size;
-		page->swappable = (as == NULL);
+		page->npages = 0;
 
 		// Next page should have next page virtual address
 		vaddr += PAGE_SIZE;
 	}
-	// TODO: Once we set to 0 this becomes relevant
-	coremaps[block_index].npages = block_size;
 
-	paddr = block_index * PAGE_SIZE + coremaps_base;
-	as_zero_region(paddr, npages);
+	// First page set must record the number of pages set
+	coremaps[idx].npages = len;
 
+	// Determine the page and zero it
+	paddr_t paddr = idx * PAGE_SIZE + coremaps_base;
+	as_zero_region(paddr, len);
+	return paddr;
+}
+
+/*
+ * To get the pages from coremaps
+ */
+paddr_t
+coremaps_getppages(size_t npages, struct addrspace* as, vaddr_t vaddr) {
+
+	lock_acquire(coremaps_lock);
+
+	// Find the page(s) that we will take over
+	size_t idx;
+	size_t startidx = 0;
+	// Check for a region of free pages
+	int err = cm_findRegion(startidx, npages, &idx, check_free);
+
+	// We didn't find a region of free pages - search for a region we can swap
+	if (err) {
+		startidx = cm_get_victim();
+		err = cm_findRegion(startidx, npages, &idx, check_free_swap);
+		if (err) {
+			lock_release(coremaps_lock);
+			return err;
+		}
+	}
+
+	// Allocate the region
+	paddr_t paddr = cm_allocRegion(idx, npages, as, vaddr);
 	lock_release(coremaps_lock);
 	return paddr;
 }
@@ -243,7 +234,7 @@ coremaps_getppages(size_t npages, struct addrspace* as, vaddr_t vaddr) {
 void
 coremaps_free(paddr_t paddr){
 	// TODO: Should this be allowed, or panic'd?
-	if (paddr > coremaps_base) return;
+	if (paddr < coremaps_base) return;
 
 	lock_acquire(coremaps_lock);
 
@@ -254,7 +245,7 @@ coremaps_free(paddr_t paddr){
 
 	// Don't try to free pages not in the map (this shouldn't happen?)
 	// TODO: KASSERT this?
-	if (index >= coremaps_npages) {
+	if (index >= cm_npages) {
 		lock_release(coremaps_lock);
 		return;
 	}
@@ -264,13 +255,12 @@ coremaps_free(paddr_t paddr){
 	size_t npages = coremaps[index].npages;
 	struct addrspace* as = coremaps[index].cm_as;
 
-	if (npages == 0) npages = 1;
 	// TODO: This should be here but the if above shouldn't
 	KASSERT(npages > 0);
 
 	// Free all pages that were allocated
 	for (; npages > 0; --npages) {
-		KASSERT(index < coremaps_npages);
+		KASSERT(index < cm_npages);
 
 		if (as != NULL) {
 			// Invalidate the page in the page table (not for kernel though)
@@ -300,8 +290,8 @@ coremaps_as_free(struct addrspace* as) {
 		if (seg == NULL) continue;
 
 		// Iterate over the page table
-		for (size_t npages = seg->npages; npages > 0; --npages) {
-			paddr_t paddr = pt[npages-1].paddr;
+		for (size_t i = 0; i < seg->npages; ++i) {
+			paddr_t paddr = pt[i].paddr;
 			if (paddr & PT_VALID) coremaps_free(paddr & PAGE_FRAME);
 		}
 	}

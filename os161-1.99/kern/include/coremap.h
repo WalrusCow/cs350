@@ -18,8 +18,6 @@ struct coremap {
 	vaddr_t cm_vaddr;
 	// indicate is the fram allocated or not
 	bool free;
-	// Flag to indicate if this is swappable or not
-	bool swappable;
 };
 
 /*
