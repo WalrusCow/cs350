@@ -234,7 +234,7 @@ coremaps_getppages(size_t npages, struct addrspace* as, vaddr_t vaddr) {
 void
 coremaps_free(paddr_t paddr){
 	// TODO: Should this be allowed, or panic'd?
-	if (paddr > coremaps_base) return;
+	if (paddr < coremaps_base) return;
 
 	lock_acquire(coremaps_lock);
 
@@ -255,7 +255,6 @@ coremaps_free(paddr_t paddr){
 	size_t npages = coremaps[index].npages;
 	struct addrspace* as = coremaps[index].cm_as;
 
-	if (npages == 0) npages = 1;
 	// TODO: This should be here but the if above shouldn't
 	KASSERT(npages > 0);
 
@@ -291,8 +290,8 @@ coremaps_as_free(struct addrspace* as) {
 		if (seg == NULL) continue;
 
 		// Iterate over the page table
-		for (size_t npages = seg->npages; npages > 0; --npages) {
-			paddr_t paddr = pt[npages-1].paddr;
+		for (size_t i = 0; i < seg->npages; ++i) {
+			paddr_t paddr = pt[i].paddr;
 			if (paddr & PT_VALID) coremaps_free(paddr & PAGE_FRAME);
 		}
 	}
