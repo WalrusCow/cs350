@@ -8,7 +8,7 @@
 
 #define SWAPFILESIZE 9437184
 
-int swapfree(struct addrspace *as);
+void swap_free(uint16_t swap_offset);
 
 void swap_init(void);
 

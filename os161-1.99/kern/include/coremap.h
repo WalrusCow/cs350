@@ -40,7 +40,7 @@ coremaps_getppages(size_t npages, struct addrspace* as, vaddr_t vaddr);
  * To free a page in coremaps
  */
 void
-coremaps_free(paddr_t paddr);
+coremaps_free(paddr_t paddr, uint16_t swap_offset);
 
 /*
  * To free pages in one address space

@@ -11,7 +11,7 @@ static const char filename[] = "SWAPFILE";
 
 static struct lock* swap_mutex;
 
-static	uint16_t max_pages = 2304; //int16_t
+static const uint16_t max_pages = 2304; //int16_t
 	
 static	uint16_t emptyslots; //int16_t
 	
@@ -21,16 +21,15 @@ static	bool swaptable[2304];
 
 /*
 	takes in the source and destination
-	need to later validate pt and tlb, I think this is done after loadpage
 	
-	called in loadpage?
-	loadpage does takes in an as
+	called in loadpage
 	
 */
 int
 swapin_mem(uint16_t file_offset,paddr_t p_dest){
 	// load from disk to memory similar to load page
 	KASSERT((p_dest&PAGE_FRAME) == p_dest);
+	KASSERT(file_offset < max_pages);
 	KASSERT(swapF != NULL);
 	
 	
@@ -38,7 +37,7 @@ swapin_mem(uint16_t file_offset,paddr_t p_dest){
   	struct uio u;
 	
 	void* kvaddr = (void*)PADDR_TO_KVADDR(p_dest);
- 	uio_kinit(&iov, &u, kvaddr, PAGE_SIZE, file_offset, UIO_READ);
+ 	uio_kinit(&iov, &u, kvaddr, PAGE_SIZE, file_offset*PAGE_SIZE, UIO_READ);
 	int result = VOP_READ(swapF,&u);
 	
 	if(result){
@@ -99,7 +98,7 @@ swapout_mem(paddr_t paddr, uint16_t *swap_offset){
 	}
 	
 	void* kvaddr = (void*)PADDR_TO_KVADDR(paddr);
- 	uio_kinit(&iov, &u, kvaddr, PAGE_SIZE, pageindex, UIO_WRITE);
+ 	uio_kinit(&iov, &u, kvaddr, PAGE_SIZE, pageindex*PAGE_SIZE, UIO_WRITE);
 	
 	//copy out
 	int result = VOP_WRITE(swapF,&u);
@@ -128,40 +127,15 @@ swapout_mem(paddr_t paddr, uint16_t *swap_offset){
 	
 	return # of empty slots generated from this call
 */
-int
-swapfree(struct addrspace *as){
-	int freed_slots = 0;
-	
-	KASSERT(as!=NULL);
-	KASSERT(as->text_seg!=NULL);
-	KASSERT(as->stack_seg!=NULL);
-	
+void
+swap_free(uint16_t swap_offset){
+
 	// do it for page table2 and stack
-	for(uint16_t i = 0; i < as->text_seg->npages ; i++){ // segment.c data size
-		// if it's not valid -> not in p memory
-		// and it is loaded
-		struct pte PTE = as->data_pt[i];
-		if(!(PTE.paddr & PT_VALID)&&PTE.swap_offset!=0xffff){
-			lock_acquire(swap_mutex);
-			swaptable[PTE.swap_offset]=true;
-			freed_slots ++;
-			emptyslots ++;
-			lock_release(swap_mutex);
-		}
-	}
-	
-	for(uint16_t i = 0; i < as->stack_seg->npages ; i++){ // segment.c stack size
-		struct pte PTE = as->stack_pt[i];
-		if(!(PTE.paddr & PT_VALID)&&PTE.swap_offset!=0xffff){
-			lock_acquire(swap_mutex);
-			swaptable[PTE.swap_offset]=true;
-			freed_slots ++;
-			emptyslots ++;
-			lock_release(swap_mutex);
-		}
-	}
-	
-	return freed_slots;
+	lock_acquire(swap_mutex);
+	swaptable[swap_offset]=true;
+	emptyslots ++;
+	lock_release(swap_mutex);
+
 }
 
 

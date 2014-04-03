@@ -25,10 +25,11 @@ struct pte{
 
 /*
  * get the corresponding physical address by passing in a virtual address
+ * should return a pte, probably
  */
 
 int
-pt_getEntry(vaddr_t vaddr, paddr_t* paddr);
+pt_getEntry(vaddr_t vaddr, struct pte* PTE);
 
 /*
  * after loading a demand page, store the allocated
@@ -41,7 +42,7 @@ pt_setEntry(vaddr_t vaddr, paddr_t paddr);
  * use VOP_READ to load a page
  */
 int
-pt_loadPage(vaddr_t vaddr, paddr_t paddr, struct addrspace *as, seg_type type);
+pt_loadPage(vaddr_t vaddr, paddr_t paddr, uint16_t swap_offset, struct addrspace *as, seg_type type);
 
 /*
  * Get the page table for this vaddr, or NULL if doesn't exist.
@@ -52,7 +53,7 @@ get_pt(seg_type type, struct addrspace* as);
 /*
  * Invalid one entry in the page table
  */
-void pt_invalid(vaddr_t vaddr, struct addrspace* as);
+void pt_invalid(vaddr_t vaddr, struct addrspace* as,uint16_t swap_offset);
 #endif /* OPT-A3 */
 
 #endif /* _PT_H_ */

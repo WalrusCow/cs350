@@ -7,6 +7,7 @@
 #include <uw-vmstats.h>
 #include <segments.h>
 #include <synch.h>
+#include <swapfile.h>
 
 static paddr_t coremaps_base;
 static paddr_t coremaps_end;
@@ -77,6 +78,10 @@ void coremaps_init(){
 		coremaps[i].cm_vaddr = 0;
 		coremaps[i].npages = 0;
 	}
+	
+	// init swapfile
+	swap_init();
+	// when do we destroy coremap?
 
 }
 
@@ -175,9 +180,23 @@ cm_allocRegion(size_t idx, size_t len, struct addrspace* as, vaddr_t vaddr) {
 		// Must be free or swappable
 		KASSERT(page->free || page->cm_as);
 
-		//if (!page.free) {
-		//	// TODO: Swap out
-		//}
+		if (!page->free) {
+			// for now
+			KASSERT(as!=NULL); // not swapping out kernel, panic
+			
+			uint16_t swap_offset = 0xffff;
+			paddr_t paddr = coremaps_base + (PAGE_SIZE*(idx+i));
+			seg_type type;
+			get_seg_type(vaddr,as,&type);
+			if(type!=TEXT){// not in TEXT segment
+				swapout_mem(paddr, &swap_offset); // set the offset
+			}
+			// invalidate the core map
+			// update page table 
+			// invalid tlb
+			// all in one function
+			coremaps_free(paddr, swap_offset);
+		}
 
 		// Allocate the page at block_index + i for this segment
 		page->cm_as = as;
@@ -232,7 +251,7 @@ coremaps_getppages(size_t npages, struct addrspace* as, vaddr_t vaddr) {
  * To free a page in coremaps
  */
 void
-coremaps_free(paddr_t paddr){
+coremaps_free(paddr_t paddr, uint16_t swap_offset){
 	// TODO: Should this be allowed, or panic'd?
 	if (paddr < coremaps_base) return;
 
@@ -251,11 +270,9 @@ coremaps_free(paddr_t paddr){
 	}
 
 	// How many pages were allocated at the same time as this one
-	// TODO: All but first have npages 0 is better
 	size_t npages = coremaps[index].npages;
 	struct addrspace* as = coremaps[index].cm_as;
 
-	// TODO: This should be here but the if above shouldn't
 	KASSERT(npages > 0);
 
 	// Free all pages that were allocated
@@ -265,7 +282,7 @@ coremaps_free(paddr_t paddr){
 		if (as != NULL) {
 			// Invalidate the page in the page table (not for kernel though)
 			vaddr_t vaddr = coremaps[index].cm_vaddr;
-			pt_invalid(vaddr, as);
+			pt_invalid(vaddr, as, swap_offset);
 		}
 		coremaps[index].cm_as = NULL;
 		coremaps[index].cm_vaddr = 0;
@@ -292,7 +309,12 @@ coremaps_as_free(struct addrspace* as) {
 		// Iterate over the page table
 		for (size_t i = 0; i < seg->npages; ++i) {
 			paddr_t paddr = pt[i].paddr;
-			if (paddr & PT_VALID) coremaps_free(paddr & PAGE_FRAME);
+			uint16_t offset = pt[i].swap_offset;
+			if (paddr & PT_VALID) {
+				coremaps_free(paddr & PAGE_FRAME,0xffff);
+			}else if(offset!=0xffff){
+				swap_free(offset);
+			}
 		}
 	}
 }

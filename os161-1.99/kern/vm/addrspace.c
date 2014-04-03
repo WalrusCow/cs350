@@ -181,8 +181,6 @@ as_activate(void)
 {
 
 	#if OPT_A3
-
-	int i, spl;
 	struct addrspace *as;
 
 	as = curproc_getas();
@@ -193,17 +191,10 @@ as_activate(void)
 			return;
 	}
 
-	/* Disable interrupts on this CPU while frobbing the TLB. */
-	spl = splhigh();
-
-	for (i=0; i<NUM_TLB; i++) {
-			tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
-	}
-
+	vm_tlbshootdown_all();
+	
 	vmstats_inc(VMSTAT_TLB_INVALIDATE);
 	reset_next_victim();
-
-	splx(spl);
 
 	#else
 	struct addrspace *as;
