@@ -103,7 +103,6 @@ pt_loadPage(vaddr_t vaddr, paddr_t paddr, struct addrspace *as, seg_type type) {
 	size_t seg_offset = vaddr - seg->vbase;
 	// Number of bytes left in the segment
 	size_t bytes_left;
-
 	// Don't read anything if we are at an address past the
 	// last actual data in the ELF file. This can happen because
 	// memsize > filesize in the ELF header.
@@ -111,7 +110,6 @@ pt_loadPage(vaddr_t vaddr, paddr_t paddr, struct addrspace *as, seg_type type) {
 		bytes_left = 0;
 	else
 		bytes_left = (seg->filesize - seg_offset);
-
 	// We want to read the minimum of remaining bytes and the size of a page
 	size_t readsize = (bytes_left < PAGE_SIZE) ? bytes_left : PAGE_SIZE;
 

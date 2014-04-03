@@ -8,11 +8,18 @@
 #include <vm.h>
 
 #define PT_VALID 0x00000200
-#define PT_DIRTY 0x00000400
+//#define PT_DIRTY 0x00000400
 
 #define PT_READ 0X00000080
 #define PT_WRITE 0x00000040
 #define PT_EXE 0x00000020
+
+struct PTE{
+	paddr_t paddr_v;
+	int
+	// if valid
+	
+};
 
 int
 pt_getEntry(vaddr_t vaddr, paddr_t* paddr);
