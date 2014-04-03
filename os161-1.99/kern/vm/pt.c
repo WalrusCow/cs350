@@ -36,11 +36,11 @@ int pt_getEntry(vaddr_t vaddr, paddr_t* paddr) {
 	if (err) return err;
 
 	struct segment* seg = get_segment(type, as);
-	paddr_t* pageTable = get_pt(type, as);
+	struct pte* pageTable = get_pt(type, as);
 
 	// TODO: Account for stack
 	int index = (vaddr - seg->vbase) / PAGE_SIZE;
-	*paddr = pageTable[index];
+	*paddr = pageTable[index].paddr;
 	return 0;
 }
 
@@ -74,13 +74,13 @@ pt_setEntry(vaddr_t vaddr, paddr_t paddr) {
 	if (err) return err;
 
 	struct segment* seg = get_segment(type, as);
-	paddr_t* pageTable = get_pt(type, as);
+	struct pte* pageTable = get_pt(type, as);
 
 	// Index in the page table
 	int index = (vaddr - seg->vbase) / PAGE_SIZE;
 	// Keep all old flags (they are initialized at start)
-	paddr |= pageTable[index] & ~PAGE_FRAME;
-	pageTable[index] = paddr;
+	paddr |= (pageTable[index].paddr) & ~PAGE_FRAME;
+	pageTable[index].paddr = paddr;
 	return 0;
 }
 
@@ -153,7 +153,7 @@ pt_loadPage(vaddr_t vaddr, paddr_t paddr, struct addrspace *as, seg_type type) {
 /*
  * Get the page table for this vaddr, or NULL if doesn't exist.
  */
-paddr_t*
+struct pte*
 get_pt(seg_type type, struct addrspace* as) {
 
 	switch(type) {
@@ -178,15 +178,15 @@ void pt_invalid(vaddr_t vaddr, struct addrspace* as){
 	get_seg_type(vaddr, as, &type);
 
 	struct segment* seg = get_segment(type, as);
-	paddr_t* pageTable = get_pt(type, as);
+	struct pte* pageTable = get_pt(type, as);
 
 	// Index in the page table
 	int index = (vaddr - seg->vbase) / PAGE_SIZE;
 
 	//invalid that entry
-	paddr_t paddr = pageTable[index];
+	paddr_t paddr = pageTable[index].paddr;
 	paddr &= ~(PT_VALID);
-	pageTable[index] = paddr;
+	pageTable[index].paddr = paddr;
 
 }
 

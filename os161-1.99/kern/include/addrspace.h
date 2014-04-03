@@ -38,6 +38,7 @@
 #include <vm.h>
 #include <segments.h>
 #include "opt-dumbvm.h"
+#include <pt.h>
 
 struct vnode;
 
@@ -64,9 +65,9 @@ struct addrspace {
 	struct segment* stack_seg;
 
 	// page table for three segments
-	paddr_t * text_pt;
-	paddr_t * data_pt;
-	paddr_t * stack_pt;
+	struct pte * text_pt;
+	struct pte * data_pt;
+	struct pte * stack_pt;
 
 	// vnode for load pages
 	struct vnode* as_vn;
