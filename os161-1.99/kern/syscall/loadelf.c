@@ -93,8 +93,7 @@ static
 int
 prepare_segment(struct addrspace *as, struct vnode *v,
 	     off_t offset, vaddr_t vaddr,
-	     size_t memsize, size_t filesize,
-		 int is_executable) {
+	     size_t memsize, size_t filesize) {
 
 	if (filesize > memsize) {
 		kprintf("ELF: warning: segment filesize > segment memsize\n");

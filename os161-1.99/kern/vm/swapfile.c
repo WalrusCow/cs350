@@ -11,9 +11,9 @@ static const char filename[] = "SWAPFILE";
 
 static struct lock* swap_mutex;
 
-static	int16_t max_pages = 2304; //int16_t
+static	uint16_t max_pages = 2304; //int16_t
 	
-static	int16_t emptyslots; //int16_t
+static	uint16_t emptyslots; //int16_t
 	
 static 	struct vnode * swapF;
 	
@@ -28,11 +28,10 @@ static	bool swaptable[2304];
 	
 */
 int
-swapin_mem(int16_t file_offset,paddr_t p_dest){
+swapin_mem(uint16_t file_offset,paddr_t p_dest){
 	// load from disk to memory similar to load page
 	KASSERT((p_dest&PAGE_FRAME) == p_dest);
 	KASSERT(swapF != NULL);
-	KASSERT(file_offset >= 0 && (file_offset < max_pages));
 	
 	
 	struct iovec iov; // buffer
@@ -62,7 +61,7 @@ swapin_mem(int16_t file_offset,paddr_t p_dest){
 	
 */
 int 
-swapout_mem(paddr_t paddr, int16_t *swap_offset){
+swapout_mem(paddr_t paddr, uint16_t *swap_offset){
 
 	KASSERT((paddr&PAGE_FRAME) == paddr); // should be page index
 	
@@ -138,24 +137,24 @@ swapfree(struct addrspace *as){
 	KASSERT(as->stack_seg!=NULL);
 	
 	// do it for page table2 and stack
-	for(int i = 0; i < as->text_seg->npages ; i++){ // segment.c data size
+	for(uint16_t i = 0; i < as->text_seg->npages ; i++){ // segment.c data size
 		// if it's not valid -> not in p memory
 		// and it is loaded
 		struct pte PTE = as->data_pt[i];
-		if(!(PTE->paddr & PT_VALID)&&PTE->swap_offset!=0xffff){
+		if(!(PTE.paddr & PT_VALID)&&PTE.swap_offset!=0xffff){
 			lock_acquire(swap_mutex);
-			swaptable[PTE->swap_offset]=true;
+			swaptable[PTE.swap_offset]=true;
 			freed_slots ++;
 			emptyslots ++;
 			lock_release(swap_mutex);
 		}
 	}
 	
-	for(int i = 0; i < as->stack_seg->npages ; i++){ // segment.c stack size
+	for(uint16_t i = 0; i < as->stack_seg->npages ; i++){ // segment.c stack size
 		struct pte PTE = as->stack_pt[i];
-		if(!(PTE->paddr & PT_VALID)&&PTE->swap_offset!=0xffff){
+		if(!(PTE.paddr & PT_VALID)&&PTE.swap_offset!=0xffff){
 			lock_acquire(swap_mutex);
-			swaptable[PTE->swap_offset]=true;
+			swaptable[PTE.swap_offset]=true;
 			freed_slots ++;
 			emptyslots ++;
 			lock_release(swap_mutex);

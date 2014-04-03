@@ -14,12 +14,12 @@ void swap_init(void);
 
 void swap_destroy(void);
 
-int swapin_mem(int16_t file_offset,paddr_t p_dest);
+int swapin_mem(uint16_t file_offset,paddr_t p_dest);
 
 /*
 	return the offset in the swap file if success
 */
-int swapout_mem(paddr_t paddr,int16_t *swap_offset);
+int swapout_mem(paddr_t paddr,uint16_t *swap_offset);
 #endif
 
 #endif

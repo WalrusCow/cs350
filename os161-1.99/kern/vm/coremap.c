@@ -294,14 +294,14 @@ void
 coremaps_as_free(struct addrspace* as) {
 	// Free memory for all segments from this address space
 	for (seg_type type = TEXT; type <= STACK; ++type) {
-		paddr_t* pt = get_pt(type, as);
+		struct pte* pt = get_pt(type, as);
 		if (pt == NULL) continue;
 		struct segment* seg = get_segment(type, as);
 		if (seg == NULL) continue;
 
 		// Iterate over the page table
 		for (size_t npages = seg->npages; npages > 0; --npages) {
-			paddr_t paddr = pt[npages-1];
+			paddr_t paddr = pt[npages-1].paddr;
 			if (paddr & PT_VALID) coremaps_free(paddr & PAGE_FRAME);
 		}
 	}

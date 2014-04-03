@@ -264,24 +264,26 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 
 	if (as->text_pt == NULL) {
 		// Space for page table
-		as->text_pt = kmalloc(sizeof(paddr_t) * npages);
+		as->text_pt = kmalloc(sizeof(struct pte) * npages);
 		if (as->text_pt == NULL) return ENOMEM;
 
 		// Initialize the page table
 		for(size_t i = 0; i < npages; i++){
-			as->text_pt[i] = flags;
+			as->text_pt[i].paddr = flags;
+			as->text_pt[i].swap_offset = 0xffff;
 		}
 		return 0;
 	}
 
 	if (as->data_pt == NULL) {
 		// Space for page table
-		as->data_pt = kmalloc(sizeof(paddr_t) * npages);
+		as->data_pt = kmalloc(sizeof(struct pte) * npages);
 		if (as->text_pt == NULL) return ENOMEM;
 
 		// Initialize the page table
 		for(size_t i = 0; i < npages; i++){
-			as->data_pt[i] = flags;
+			as->data_pt[i].paddr = flags;
+			as->data_pt[i].swap_offset = 0xffff;
 		}
 		return 0;
 	}
@@ -342,7 +344,7 @@ int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
 	#if OPT_A3
-	as->stack_pt = kmalloc(VM_STACKPAGES * sizeof(paddr_t));
+	as->stack_pt = kmalloc(VM_STACKPAGES * sizeof(struct pte));
 	if (as->stack_pt == NULL) return ENOMEM;
 
 	as->stack_seg = kmalloc(sizeof(struct segment));

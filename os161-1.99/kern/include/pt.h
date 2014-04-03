@@ -14,23 +14,39 @@
 #define PT_WRITE 0x00000040
 #define PT_EXE 0x00000020
 
-struct PTE{
-	paddr_t paddr_v;
-	int
-	// if valid
-	
+//entry in the page table
+struct pte{
+	//frame number for the current page
+	paddr_t paddr;
+	//offset in swap file, 16 bits is enough since the swap file is 9MB maximum
+	//0xffff means not in swap file
+	uint16_t swap_offset;
 };
+
+/*
+ * get the corresponding physical address by passing in a virtual address
+ */
 
 int
 pt_getEntry(vaddr_t vaddr, paddr_t* paddr);
 
+/*
+ * after loading a demand page, store the allocated
+ * physical address into the page table
+ */
 int
 pt_setEntry(vaddr_t vaddr, paddr_t paddr);
 
+/*
+ * use VOP_READ to load a page
+ */
 int
 pt_loadPage(vaddr_t vaddr, paddr_t paddr, struct addrspace *as, seg_type type);
 
-paddr_t*
+/*
+ * Get the page table for this vaddr, or NULL if doesn't exist.
+ */
+struct pte *
 get_pt(seg_type type, struct addrspace* as);
 
 /*
