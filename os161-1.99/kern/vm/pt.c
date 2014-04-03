@@ -171,7 +171,8 @@ get_pt(seg_type type, struct addrspace* as) {
 /*
  * Invalid one entry in the page table
  */
-void pt_invalid(vaddr_t vaddr, struct addrspace* as){
+void
+pt_invalid(vaddr_t vaddr, struct addrspace* as){
 
 	//get the table
 	seg_type type;
@@ -188,6 +189,18 @@ void pt_invalid(vaddr_t vaddr, struct addrspace* as){
 	paddr &= ~(PT_VALID);
 	pageTable[index].paddr = paddr;
 
+}
+
+struct pte*
+create_pt(size_t npages, int flags) {
+	struct pte* pt = kmalloc(sizeof(struct pte) * npages);
+	if (pt == NULL) return NULL;
+
+	for (size_t i = 0; i < npages; ++i) {
+		pt[i].paddr = flags;
+		pt[i].swap_offset = 0xffff;
+	}
+	return pt;
 }
 
 #endif /* OPT-A3 */
