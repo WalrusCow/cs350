@@ -69,7 +69,7 @@ vm_bootstrap(void)
 	#endif /* OPT-A3 */
 }
 
-/* Allocate/free some kernel-space virtual pages */
+/* Allocate some kernel-space virtual pages */
 vaddr_t
 alloc_kpages(int npages)
 {
@@ -100,8 +100,8 @@ void
 free_kpages(vaddr_t addr)
 {
 	#if OPT_A3
-	//free page
-	coremaps_free(addr);
+	// free page
+	coremaps_free(KVADDR_TO_PADDR(addr));
 	#else
 	/* nothing - leak the memory. */
 

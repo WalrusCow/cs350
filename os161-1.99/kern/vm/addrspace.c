@@ -346,6 +346,10 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	#if OPT_A3
 	as->stack_pt = kmalloc(VM_STACKPAGES * sizeof(struct pte));
 	if (as->stack_pt == NULL) return ENOMEM;
+	for (size_t i = 0; i < VM_STACKPAGES; ++i) {
+		as->stack_pt[i].paddr = 0;
+		as->stack_pt[i].swap_offset = 0xffff;
+	}
 
 	as->stack_seg = kmalloc(sizeof(struct segment));
 	if (as->stack_seg == NULL) return ENOMEM;
