@@ -2,6 +2,7 @@ os161-1.99/kern/compile
 root
 a1-test-scripts
 a2-test-scripts
+a3-test-scripts
 os161-1.99/man
 os161-1.99/build
 defs.mk

@@ -35,14 +35,14 @@
  * Address space structure and operations.
  */
 
-
 #include <vm.h>
+#include <segments.h>
 #include "opt-dumbvm.h"
+#include <pt.h>
 
 struct vnode;
 
-
-/* 
+/*
  * Address space - data structure associated with the virtual memory
  * space of a process.
  *
@@ -51,38 +51,26 @@ struct vnode;
 
 struct addrspace {
 #if OPT_DUMBVM
-        vaddr_t as_vbase1;
-        paddr_t as_pbase1;
-        size_t as_npages1;
-        vaddr_t as_vbase2;
-        paddr_t as_pbase2;
-        size_t as_npages2;
-        paddr_t as_stackpbase;
+	vaddr_t as_vbase1;
+	paddr_t as_pbase1;
+	size_t as_npages1;
+	vaddr_t as_vbase2;
+	paddr_t as_pbase2;
+	size_t as_npages2;
+	paddr_t as_stackpbase;
 #else
 
-	vaddr_t as_vbase1;
-        size_t as_npages1;
-        vaddr_t as_vbase2;
-        size_t as_npages2;
+	struct segment* text_seg;
+	struct segment* data_seg;
+	struct segment* stack_seg;
 
-	//page table for three segments
-	//text segment
-	paddr_t * text_pt;
-	//data segment
-	paddr_t * data_pt;
-	//stack segment
-	paddr_t * stack_pt;
+	// page table for three segments
+	struct pte * text_pt;
+	struct pte * data_pt;
+	struct pte * stack_pt;
 
-	// offset for vnode, beginning
-	off_t as_vbase1_offset;
-	off_t as_vbase2_offset;
-
-	// offset for vnode, end
-	size_t as_vbase1_filesize;
-	size_t as_vbase2_filesize;
-
-	//vnode for load pages
-	struct vnode * as_vn;
+	// vnode for load pages
+	struct vnode* as_vn;
 
 #endif
 };
@@ -90,7 +78,7 @@ struct addrspace {
 /*
  * Functions in addrspace.c:
  *
- *    as_create - create a new empty address space. You need to make 
+ *    as_create - create a new empty address space. You need to make
  *                sure this gets called in all the right places. You
  *                may find you want to change the argument list. May
  *                return NULL on out-of-memory error.

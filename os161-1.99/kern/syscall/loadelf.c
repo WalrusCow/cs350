@@ -59,11 +59,12 @@
 #include <addrspace.h>
 #include <vnode.h>
 #include <elf.h>
+
 #include "opt-A3.h"
 
 #if OPT_A3
-
-#endif
+#include <segments.h>
+#endif /* OPT_A3 */
 
 /*
  * Load a segment at virtual address VADDR. The segment in memory
@@ -90,7 +91,7 @@ because we need those for page fault later
 */
 static
 int
-prepare_page(struct addrspace *as, struct vnode *v,
+prepare_segment(struct addrspace *as, struct vnode *v,
 	     off_t offset, vaddr_t vaddr,
 	     size_t memsize, size_t filesize) {
 
@@ -99,28 +100,23 @@ prepare_page(struct addrspace *as, struct vnode *v,
 		filesize = memsize;
 	}
 
-	(void) vaddr; // already saved as vbase1 or vbase2
-
-	// memsize is used to calculate npages
 	if(as->as_vn == NULL){
 		as->as_vn = v;
 	}
 
-	if(as->as_vbase1_filesize == 0){
-		as->as_vbase1_offset = offset;
-		as->as_vbase1_filesize = filesize;
+	if (as->text_seg == NULL) {
+		as->text_seg = seg_create(TEXT, offset, filesize, memsize, vaddr);
 		return 0;
 	}
-	if(as->as_vbase2_filesize == 0){
-		as->as_vbase2_offset = offset;
-		as->as_vbase2_filesize =filesize;
+	if (as->data_seg == NULL) {
+		as->data_seg = seg_create(DATA, offset, filesize, memsize, vaddr);
 		return 0;
 	}
 
 	/*
 	 * Support for more than two regions is not available.
 	 */
-	kprintf("dumbvm: Warning: too many regions\n");
+	kprintf("vm: Warning: too many regions\n");
 	return EUNIMP;
 }
 #endif
@@ -134,7 +130,7 @@ int
 load_elf(struct vnode *v, vaddr_t *entrypoint)
 {
 	// on stack, will be deallocated after;
-	
+
 	Elf_Ehdr eh;   /* Executable header */
 	Elf_Phdr ph;   /* "Program header" = segment header */
 	int result, i;
@@ -220,7 +216,7 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 		    case PT_MIPS_REGINFO: /* skip */ continue;
 		    case PT_LOAD: break;
 		    default:
-			kprintf("loadelf: unknown segment type %d\n", 
+			kprintf("loadelf: unknown segment type %d\n",
 				ph.p_type);
 			return ENOEXEC;
 		}
@@ -236,15 +232,15 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 	}
 
 	result = as_prepare_load(as); // does nothing for now (use to do the job of page table, getppages ->physical address)
-	
+
 	if (result) {
 		return result;
 	}
 
 	/*
-	 * Save resources necessary for actual load later 
+	 * Save resources necessary for actual load later
 	 */
-	 
+
 	for (i=0; i<eh.e_phnum; i++) {
 		off_t offset = eh.e_phoff + i*eh.e_phentsize;
 		uio_kinit(&iov, &ku, &ph, sizeof(ph), offset, UIO_READ);
@@ -271,11 +267,11 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 			return ENOEXEC;
 		}
 
+		// TODO: Combine this and as_define_region
 		// assume for now that vnode will remain open until we exit
 		// originally load segment
-		result = prepare_page(as, v, ph.p_offset, ph.p_vaddr, 
-				      ph.p_memsz, ph.p_filesz/*,
-				      ph.p_flags & PF_X*/); // pf_x is set when we initalize pt
+		result = prepare_segment(as, v, ph.p_offset, ph.p_vaddr,
+				      ph.p_memsz, ph.p_filesz);
 		if (result) {
 			return result;
 		}

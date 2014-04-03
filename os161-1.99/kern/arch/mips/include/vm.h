@@ -30,7 +30,6 @@
 #ifndef _MIPS_VM_H_
 #define _MIPS_VM_H_
 
-
 /*
  * Machine-dependent VM system definitions.
  */
@@ -66,6 +65,7 @@
  * a valid address, and will make a *huge* mess if you scribble on it.
  */
 #define PADDR_TO_KVADDR(paddr) ((paddr)+MIPS_KSEG0)
+#define KVADDR_TO_PADDR(vaddr) ((vaddr)-MIPS_KSEG0)
 
 /*
  * The top of user space. (Actually, the address immediately above the
