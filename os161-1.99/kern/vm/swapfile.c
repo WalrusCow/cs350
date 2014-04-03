@@ -11,33 +11,33 @@ static const char filename[] = "SWAPFILE";
 
 static struct lock* swap_mutex;
 
-static const uint16_t max_pages = 2304; //int16_t
+static	uint16_t max_pages = 2304; //int16_t
 	
 static	uint16_t emptyslots; //int16_t
 	
-static 	struct vnode * swapF;
+static 	struct vnode* swapF;
 	
 static	bool swaptable[2304];
 
 /*
 	takes in the source and destination
+	need to later validate pt and tlb, I think this is done after loadpage
 	
-	called in loadpage
+	called in loadpage?
+	loadpage does takes in an as
 	
 */
 int
 swapin_mem(uint16_t file_offset,paddr_t p_dest){
 	// load from disk to memory similar to load page
 	KASSERT((p_dest&PAGE_FRAME) == p_dest);
-	KASSERT(file_offset < max_pages);
 	KASSERT(swapF != NULL);
-	
 	
 	struct iovec iov; // buffer
   	struct uio u;
 	
 	void* kvaddr = (void*)PADDR_TO_KVADDR(p_dest);
- 	uio_kinit(&iov, &u, kvaddr, PAGE_SIZE, file_offset*PAGE_SIZE, UIO_READ);
+ 	uio_kinit(&iov, &u, kvaddr, PAGE_SIZE, file_offset, UIO_READ);
 	int result = VOP_READ(swapF,&u);
 	
 	if(result){
@@ -98,7 +98,7 @@ swapout_mem(paddr_t paddr, uint16_t *swap_offset){
 	}
 	
 	void* kvaddr = (void*)PADDR_TO_KVADDR(paddr);
- 	uio_kinit(&iov, &u, kvaddr, PAGE_SIZE, pageindex*PAGE_SIZE, UIO_WRITE);
+ 	uio_kinit(&iov, &u, kvaddr, PAGE_SIZE, pageindex, UIO_WRITE);
 	
 	//copy out
 	int result = VOP_WRITE(swapF,&u);
@@ -119,16 +119,10 @@ swapout_mem(paddr_t paddr, uint16_t *swap_offset){
 }
 
 /* 	
-	when exit, should set all pages in swap file to be free
-	called in as_destroy
-	
-	for each PTE, if not valid and has a swap entry
-	get index and free
-	
-	return # of empty slots generated from this call
+	free a page in the swap file
 */
 void
-swap_free(uint16_t swap_offset){
+swap_free(unit16_t swap_offset){
 
 	// do it for page table2 and stack
 	lock_acquire(swap_mutex);
