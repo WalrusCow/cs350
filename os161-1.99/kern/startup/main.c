@@ -55,6 +55,7 @@
 #include "opt-A3.h"
 
 #if OPT_A3
+#include <swapfile.h>
 #include <uw-vmstats.h>
 #include <coremap.h>
 #endif
@@ -123,7 +124,7 @@ boot(void)
 #if OPT_A3
 	//intialize vmstats
 	vmstats_init();
-	//intializa lock for coremaps
+	//intialize lock for coremaps
 	coremaps_lock_init();
 #endif /* OPT_A3 */
 
@@ -143,6 +144,10 @@ boot(void)
 
 	/* Default bootfs - but ignore failure, in case emu0 doesn't exist */
 	vfs_setbootfs("emu0");
+#if OPT_A3
+	// Set up swapfile now that bootfs is up
+	swap_init();
+#endif
 
 
 	/*

@@ -101,7 +101,7 @@ free_kpages(vaddr_t addr)
 {
 	#if OPT_A3
 	// free page
-	coremaps_free(KVADDR_TO_PADDR(addr),0xffff);
+	coremaps_free(KVADDR_TO_PADDR(addr));
 	// the swapoffset is not used for kernel
 	#else
 	/* nothing - leak the memory. */

@@ -6,20 +6,25 @@
 #include <types.h>
 #include <addrspace.h>
 
-#define SWAPFILESIZE 9437184
+// Size in bytes
+#define SWAPFILE_SIZE 9*1024*1024
+// Number of pages in the file
+#define SWAPFILE_PAGES SWAPFILE_SIZE / PAGE_SIZE
 
-void swap_free(uint16_t swap_offset);
+#define SWAPFILE_NAME "/SWAPFILE"
+
+void swap_free(uint16_t pageIndex);
 
 void swap_init(void);
 
 void swap_destroy(void);
 
-int swapin_mem(uint16_t file_offset,paddr_t p_dest);
+int swapin_mem(uint16_t pageIndex, paddr_t p_dest);
 
 /*
 	return the offset in the swap file if success
 */
-int swapout_mem(paddr_t paddr,uint16_t *swap_offset);
+int swapout_mem(paddr_t paddr, uint16_t *swap_page);
 #endif
 
 #endif
