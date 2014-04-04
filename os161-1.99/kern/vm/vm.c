@@ -1,4 +1,3 @@
-
 #include "opt-A3.h"
 
 #ifdef UW
@@ -221,19 +220,12 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	if (newPage) {
 		// Load the page into memory - it is a new page
-		// TODO: Do not pass swap_offset here
 		result = pt_loadPage(faultaddress, paddr, swap_offset, as, segment_type);
 
 		if (result) {
 			// Invalidate TLB and page table entries?
 			return result;
 		}
-		// TODO: Update TLB and page table here, or above?
-		// ... it might be better to do it here.
-		// one thing to think about: can we swap out the physical page
-		// in between then and now?  I seriously doubt it.
-		// Maybe put in a check when choosing a page to swap to check if
-		// the page has been loaded, and only swap those that have?
 	}
 	return 0;
 

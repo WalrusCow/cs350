@@ -18,7 +18,7 @@ static struct coremap* coremaps;
 // lock for the coremaps, solve the synchronization problem
 static struct lock* coremaps_lock = NULL;
 
-// simple page replacement alogrithm (TODO)
+// simple page replacement alogrithm 
 static size_t next_victim = 0;
 static size_t cm_get_victim(void){
 	size_t victim;
@@ -176,6 +176,7 @@ cm_allocRegion(size_t start, size_t len, struct addrspace* as, vaddr_t vaddr) {
 		KASSERT(page->free || page->cm_as);
 
 		if (!page->free) {
+			KASSERT(page->cm_as != NULL); // not swapping out kernel, panic
 
 			uint16_t swap_offset = 0xffff;
 			paddr_t paddr = coremaps_base + (PAGE_SIZE*idx);
@@ -245,7 +246,7 @@ coremaps_getppages(size_t npages, struct addrspace* as, vaddr_t vaddr) {
  */
 void
 coremaps_free(paddr_t paddr) {
-	// TODO: Should this be allowed, or panic'd?
+	// frame not in coremaps
 	if (paddr < coremaps_base) return;
 
 	KASSERT(paddr == (paddr & PAGE_FRAME));
@@ -254,7 +255,6 @@ coremaps_free(paddr_t paddr) {
 	size_t index = (paddr - coremaps_base) / PAGE_SIZE;
 
 	// Don't try to free pages not in the map (this shouldn't happen?)
-	// TODO: KASSERT this?
 	if (index >= cm_npages) {
 		return;
 	}

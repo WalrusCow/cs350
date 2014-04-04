@@ -286,9 +286,6 @@ int sys_execv(userptr_t user_prog_name, userptr_t user_args, int* retval) {
 	err = copyin((userptr_t)user_args, &testByte, sizeof(char));
 	if (err) return err;
 
-	// TODO: We need to check if *all* of the args are valid pointers
-	// (but this edge case may not come up in tests)
-
 	// Find the nargs
 	unsigned int nargs = 0;
 	userptr_t* user_arg_arr = (userptr_t*)user_args;

@@ -10,7 +10,6 @@ struct coremap {
 	// record is this page allocated from get 1 pages or get more than 1 pages
 	// 0 is for one page, n for allocated from get n pages,
 	// where n is greater than 1
-	// TODO: Change this to be 1 if 1...
 	size_t npages;
 	// as pointer
 	struct addrspace* cm_as;
