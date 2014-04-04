@@ -177,7 +177,7 @@ cm_allocRegion(size_t start, size_t len, struct addrspace* as, vaddr_t vaddr) {
 
 		if (!page->free) {
 			// for now
-			KASSERT(as != NULL); // not swapping out kernel, panic
+			KASSERT(page->cm_as != NULL); // not swapping out kernel, panic
 
 			uint16_t swap_offset = 0xffff;
 			paddr_t paddr = coremaps_base + (PAGE_SIZE*idx);
@@ -190,7 +190,7 @@ cm_allocRegion(size_t start, size_t len, struct addrspace* as, vaddr_t vaddr) {
 			}
 
 			// Invalidate the page in the page table
-			pt_invalid(page->cm_vaddr, as, swap_offset);
+			pt_invalid(page->cm_vaddr, page->cm_as, swap_offset);
 		}
 
 		// Allocate the page at block_index + i for this segment

@@ -266,11 +266,6 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
 		as->data_pt = create_pt(npages, flags);
 		if (as->data_pt == NULL) return ENOMEM;
 
-		// Initialize the page table
-		for(size_t i = 0; i < npages; i++){
-			as->data_pt[i].paddr = flags;
-			as->data_pt[i].swap_offset = 0xffff;
-		}
 		return 0;
 	}
 
