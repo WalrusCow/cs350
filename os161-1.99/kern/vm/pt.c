@@ -13,12 +13,13 @@
 #include <uw-vmstats.h>
 #include <mips/vm.h>
 #include <segments.h>
+#include <swapfile.h>
 
 /*
  * get the corresponding physical address by passing in a virtual address
  * TODO: Take in address space.
  */
-int pt_getEntry(vaddr_t vaddr, paddr_t* paddr) {
+int pt_getEntry(vaddr_t vaddr, struct pte* PTE) {
 
 	struct addrspace *as;
 
@@ -40,7 +41,7 @@ int pt_getEntry(vaddr_t vaddr, paddr_t* paddr) {
 
 	// TODO: Account for stack
 	int index = (vaddr - seg->vbase) / PAGE_SIZE;
-	*paddr = pageTable[index].paddr;
+	*PTE = pageTable[index];
 	return 0;
 }
 
@@ -81,6 +82,7 @@ pt_setEntry(vaddr_t vaddr, paddr_t paddr) {
 	// Keep all old flags (they are initialized at start)
 	paddr |= (pageTable[index].paddr) & ~PAGE_FRAME;
 	pageTable[index].paddr = paddr;
+	pageTable[index].swap_offset = 0xffff;
 	return 0;
 }
 
@@ -88,13 +90,20 @@ pt_setEntry(vaddr_t vaddr, paddr_t paddr) {
  * use VOP_READ to load a page
  */
 int
-pt_loadPage(vaddr_t vaddr, paddr_t paddr, struct addrspace *as, seg_type type) {
-	// Size to read
-
+pt_loadPage(vaddr_t vaddr, paddr_t paddr, uint16_t swap_offset, struct addrspace *as, seg_type type) {
 	if (type == STACK) {
 		// Does nothing for stack (page already zeroed)
 		vmstats_inc(VMSTAT_PAGE_FAULT_ZERO);
 		return 0;
+	}
+
+	vmstats_inc(VMSTAT_PAGE_FAULT_DISK);
+
+	if(swap_offset != 0xffff){
+		// load from swapfile
+		int result = swapin_mem(swap_offset,paddr);
+		vmstats_inc(VMSTAT_SWAP_FILE_READ);
+		return result;
 	}
 
 	struct segment* seg = get_segment(type, as);
@@ -103,7 +112,6 @@ pt_loadPage(vaddr_t vaddr, paddr_t paddr, struct addrspace *as, seg_type type) {
 	size_t seg_offset = vaddr - seg->vbase;
 	// Number of bytes left in the segment
 	size_t bytes_left;
-
 	// Don't read anything if we are at an address past the
 	// last actual data in the ELF file. This can happen because
 	// memsize > filesize in the ELF header.
@@ -111,11 +119,9 @@ pt_loadPage(vaddr_t vaddr, paddr_t paddr, struct addrspace *as, seg_type type) {
 		bytes_left = 0;
 	else
 		bytes_left = (seg->filesize - seg_offset);
-
 	// We want to read the minimum of remaining bytes and the size of a page
 	size_t readsize = (bytes_left < PAGE_SIZE) ? bytes_left : PAGE_SIZE;
 
-	vmstats_inc(VMSTAT_PAGE_FAULT_DISK);
 	vmstats_inc(VMSTAT_ELF_FILE_READ);
 
 	// Don't bother executing the read call if we're not reading anything
@@ -170,9 +176,12 @@ get_pt(seg_type type, struct addrspace* as) {
 
 /*
  * Invalid one entry in the page table
+`* meanwhile, invalidate tlb if applicable
  */
 void
-pt_invalid(vaddr_t vaddr, struct addrspace* as){
+pt_invalid(vaddr_t vaddr, struct addrspace* as,uint16_t swap_offset){
+
+	KASSERT(as != NULL);
 
 	//get the table
 	seg_type type;
@@ -184,10 +193,18 @@ pt_invalid(vaddr_t vaddr, struct addrspace* as){
 	// Index in the page table
 	int index = (vaddr - seg->vbase) / PAGE_SIZE;
 
-	//invalid that entry
+	// invalid that entry
 	paddr_t paddr = pageTable[index].paddr;
 	paddr &= ~(PT_VALID);
 	pageTable[index].paddr = paddr;
+	pageTable[index].swap_offset = swap_offset; // invalid and swap out
+
+	// we don't know if its in tlb
+	if(curproc != NULL && curproc_getas()==as){
+		struct tlbshootdown tlbs;
+		tlbs.ts_vaddr = vaddr;
+		vm_tlbshootdown(&tlbs);
+	}
 
 }
 

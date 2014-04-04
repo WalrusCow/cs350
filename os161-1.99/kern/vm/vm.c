@@ -102,6 +102,7 @@ free_kpages(vaddr_t addr)
 	#if OPT_A3
 	// free page
 	coremaps_free(KVADDR_TO_PADDR(addr));
+	// the swapoffset is not used for kernel
 	#else
 	/* nothing - leak the memory. */
 
@@ -112,14 +113,28 @@ free_kpages(vaddr_t addr)
 void
 vm_tlbshootdown_all(void)
 {
-	panic("Not implemented yet.\n");
+	/* Disable interrupts on this CPU while frobbing the TLB. */
+	int spl = splhigh();
+
+	for (int i=0; i<NUM_TLB; i++) {
+		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+	}
+
+	splx(spl);
 }
 
 void
 vm_tlbshootdown(const struct tlbshootdown *ts)
 {
-	(void)ts;
-	panic("Not implemented yet.\n");
+	int spl = splhigh();
+	uint32_t hi = ts->ts_vaddr;
+	int index = tlb_probe(hi,0);
+	if(index >= 0){
+		tlb_write(TLBHI_INVALID(index), TLBLO_INVALID(), index);
+	}
+	splx(spl);
+	// else discard
+	
 }
 
 int
@@ -129,6 +144,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	#if OPT_A3
 
 	paddr_t paddr;
+	uint16_t swap_offset;
+	struct pte PTE;
 	struct addrspace *as;
 
 	faultaddress &= PAGE_FRAME;
@@ -163,7 +180,9 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	bool newPage = false;
 
 	// get the paddr
-	result = pt_getEntry(faultaddress, &paddr);
+	result = pt_getEntry(faultaddress, &PTE);
+	paddr = PTE.paddr;
+	swap_offset = PTE.swap_offset;
 
 	if((paddr & PT_VALID) == 0){
 		newPage = true;
@@ -202,7 +221,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	if (newPage) {
 		// Load the page into memory - it is a new page
-		result = pt_loadPage(faultaddress, paddr, as, segment_type);
+		// TODO: Do not pass swap_offset here
+		result = pt_loadPage(faultaddress, paddr, swap_offset, as, segment_type);
 
 		if (result) {
 			// Invalidate TLB and page table entries?

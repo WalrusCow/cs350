@@ -7,6 +7,7 @@
 #include <uw-vmstats.h>
 #include <segments.h>
 #include <synch.h>
+#include <swapfile.h>
 
 static paddr_t coremaps_base;
 static paddr_t coremaps_end;
@@ -77,7 +78,6 @@ void coremaps_init(){
 		coremaps[i].cm_vaddr = 0;
 		coremaps[i].npages = 0;
 	}
-
 }
 
 /*
@@ -166,18 +166,32 @@ cm_findRegion(size_t startidx, size_t len, size_t* region_idx,
  */
 static
 paddr_t
-cm_allocRegion(size_t idx, size_t len, struct addrspace* as, vaddr_t vaddr) {
-	for (size_t i = 0; i < len; ++i) {
-		KASSERT(idx + i < cm_npages);
+cm_allocRegion(size_t start, size_t len, struct addrspace* as, vaddr_t vaddr) {
+	for (size_t idx = start; idx < start + len; ++idx) {
+		KASSERT(idx < cm_npages);
 
 		// Shorthand
-		struct coremap* page = coremaps + idx + i;
+		struct coremap* page = coremaps + idx;
 		// Must be free or swappable
 		KASSERT(page->free || page->cm_as);
 
-		//if (!page.free) {
-		//	// TODO: Swap out
-		//}
+		if (!page->free) {
+			// for now
+			KASSERT(as != NULL); // not swapping out kernel, panic
+
+			uint16_t swap_offset = 0xffff;
+			paddr_t paddr = coremaps_base + (PAGE_SIZE*idx);
+			seg_type type;
+			// Trust that there is no error
+			get_seg_type(page->cm_vaddr, page->cm_as, &type);
+			// Do not swap out the text segment (it is read only)
+			if(type != TEXT) {
+				swapout_mem(paddr, &swap_offset); // set the offset
+			}
+
+			// Invalidate the page in the page table
+			pt_invalid(page->cm_vaddr, as, swap_offset);
+		}
 
 		// Allocate the page at block_index + i for this segment
 		page->cm_as = as;
@@ -190,10 +204,10 @@ cm_allocRegion(size_t idx, size_t len, struct addrspace* as, vaddr_t vaddr) {
 	}
 
 	// First page set must record the number of pages set
-	coremaps[idx].npages = len;
+	coremaps[start].npages = len;
 
 	// Determine the page and zero it
-	paddr_t paddr = idx * PAGE_SIZE + coremaps_base;
+	paddr_t paddr = start * PAGE_SIZE + coremaps_base;
 	as_zero_region(paddr, len);
 	return paddr;
 }
@@ -229,14 +243,12 @@ coremaps_getppages(size_t npages, struct addrspace* as, vaddr_t vaddr) {
 }
 
 /*
- * To free a page in coremaps
+ * To free a page in coremaps. Also invalidate the PT and TLB if necessary.
  */
 void
-coremaps_free(paddr_t paddr){
+coremaps_free(paddr_t paddr) {
 	// TODO: Should this be allowed, or panic'd?
 	if (paddr < coremaps_base) return;
-
-	lock_acquire(coremaps_lock);
 
 	KASSERT(paddr == (paddr & PAGE_FRAME));
 
@@ -246,16 +258,15 @@ coremaps_free(paddr_t paddr){
 	// Don't try to free pages not in the map (this shouldn't happen?)
 	// TODO: KASSERT this?
 	if (index >= cm_npages) {
-		lock_release(coremaps_lock);
 		return;
 	}
 
+	lock_acquire(coremaps_lock);
+
 	// How many pages were allocated at the same time as this one
-	// TODO: All but first have npages 0 is better
 	size_t npages = coremaps[index].npages;
 	struct addrspace* as = coremaps[index].cm_as;
 
-	// TODO: This should be here but the if above shouldn't
 	KASSERT(npages > 0);
 
 	// Free all pages that were allocated
@@ -265,8 +276,9 @@ coremaps_free(paddr_t paddr){
 		if (as != NULL) {
 			// Invalidate the page in the page table (not for kernel though)
 			vaddr_t vaddr = coremaps[index].cm_vaddr;
-			pt_invalid(vaddr, as);
+			pt_invalid(vaddr, as, 0xffff);
 		}
+		// Invalidate the coremap entry
 		coremaps[index].cm_as = NULL;
 		coremaps[index].cm_vaddr = 0;
 		coremaps[index].free = true;
@@ -292,7 +304,13 @@ coremaps_as_free(struct addrspace* as) {
 		// Iterate over the page table
 		for (size_t i = 0; i < seg->npages; ++i) {
 			paddr_t paddr = pt[i].paddr;
-			if (paddr & PT_VALID) coremaps_free(paddr & PAGE_FRAME);
+			uint16_t offset = pt[i].swap_offset;
+			if (paddr & PT_VALID) {
+				coremaps_free(paddr & PAGE_FRAME);
+			}
+			else if(offset != 0xffff) {
+				swap_free(offset);
+			}
 		}
 	}
 }
