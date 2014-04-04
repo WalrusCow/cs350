@@ -68,9 +68,8 @@ swapout_mem(paddr_t paddr, uint16_t *swap_offset){
 	
 	if(swapF==NULL){
 		// create file, lazy initialization
-		char* swap_FN;
-		strcpy(swap_FN, filename);
-		int result = vfs_open(swap_FN,O_RDWR,0,&(swapF));/* Open for read and write */
+		char* swap_FN = kstrdup(filename);
+		int result = vfs_open(swap_FN,O_RDWR|O_CREAT,0,&(swapF));/* Open for read and write */
 		if(result){
 			lock_release(swap_mutex);
 			return result;
@@ -122,7 +121,7 @@ swapout_mem(paddr_t paddr, uint16_t *swap_offset){
 	free a page in the swap file
 */
 void
-swap_free(unit16_t swap_offset){
+swap_free(uint16_t swap_offset){
 
 	// do it for page table2 and stack
 	lock_acquire(swap_mutex);
@@ -133,9 +132,6 @@ swap_free(unit16_t swap_offset){
 }
 
 
-/*
-	-1 means fail,
-*/
 void
 swap_init(void){
 	// initalize swap file table...		
