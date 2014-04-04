@@ -115,8 +115,6 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 		return ENOMEM;
 	}
 
-	// TODO
-
 	/* (Mis)use as_prepare_load to allocate some physical memory. */
 	if (as_prepare_load(new)) {
 		as_destroy(new);
@@ -124,13 +122,10 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	}
 
 	//copy the vnode and page table in the address space
-	// TODO: increment references
 	new->as_vn = old->as_vn;
 	//new->text_pt = kmalloc(sizeof(paddr_t) * new->as_npages1);
 	//new->data_pt = kmalloc(sizeof(paddr_t) * new->as_npages2);
-	//new->stack_pt = NULL; // TODO: Do we kmalloc here?
-
-	//Do the deep copy? what about stack? use memmove?
+	//new->stack_pt = NULL;
 
 	*ret = new;
 	return 0;

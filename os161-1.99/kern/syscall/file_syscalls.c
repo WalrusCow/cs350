@@ -243,8 +243,6 @@ sys_close(int fd) {
 		return EBADF;
 	}
 
-	/* TODO: Acquire RW lock for the vnode as "W"
-	 * and then continue?  */
 
 	//get the global fd
 	int index = curproc->file_arr[fd]->fd;

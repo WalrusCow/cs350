@@ -267,9 +267,6 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 			return ENOEXEC;
 		}
 
-		// TODO: Combine this and as_define_region
-		// assume for now that vnode will remain open until we exit
-		// originally load segment
 		result = prepare_segment(as, v, ph.p_offset, ph.p_vaddr,
 				      ph.p_memsz, ph.p_filesz);
 		if (result) {

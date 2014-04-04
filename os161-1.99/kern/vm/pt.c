@@ -17,7 +17,6 @@
 
 /*
  * get the corresponding physical address by passing in a virtual address
- * TODO: Take in address space.
  */
 int pt_getEntry(vaddr_t vaddr, struct pte* PTE) {
 
@@ -32,15 +31,19 @@ int pt_getEntry(vaddr_t vaddr, struct pte* PTE) {
 	as = curproc_getas();
 	if (as == NULL) return EFAULT;
 
+	//get the segment type
 	seg_type type;
 	int err = get_seg_type(vaddr, as, &type);
 	if (err) return err;
 
+	//get the segment and page table
 	struct segment* seg = get_segment(type, as);
 	struct pte* pageTable = get_pt(type, as);
 
-	// TODO: Account for stack
+	//get the index in page table
 	int index = (vaddr - seg->vbase) / PAGE_SIZE;
+
+	//return entry
 	*PTE = pageTable[index];
 	return 0;
 }
@@ -48,7 +51,6 @@ int pt_getEntry(vaddr_t vaddr, struct pte* PTE) {
 /*
  * after loading a demand page, store the allocated
  * physical address into the page table
- * TODO: Take in address space.
  */
 
 int
@@ -65,9 +67,6 @@ pt_setEntry(vaddr_t vaddr, paddr_t paddr) {
 	if(as == NULL) return EFAULT;
 
 	// We just allocated it, so this is obviously valid
-	// TODO: We actually want to do this outside ? Otherwise how to *invalidate*
-	// Also, we probably want a bitmask for the options without
-	// the valid bit :)
 	paddr |= PT_VALID;
 
 	seg_type type;
@@ -91,21 +90,23 @@ pt_setEntry(vaddr_t vaddr, paddr_t paddr) {
  */
 int
 pt_loadPage(vaddr_t vaddr, paddr_t paddr, uint16_t swap_offset, struct addrspace *as, seg_type type) {
-	if (type == STACK) {
-		// Does nothing for stack (page already zeroed)
-		vmstats_inc(VMSTAT_PAGE_FAULT_ZERO);
-		return 0;
-	}
-
-	vmstats_inc(VMSTAT_PAGE_FAULT_DISK);
-
+	
 	if(swap_offset != 0xffff){
+		vmstats_inc(VMSTAT_PAGE_FAULT_DISK);
 		// load from swapfile
 		int result = swapin_mem(swap_offset,paddr);
 		vmstats_inc(VMSTAT_SWAP_FILE_READ);
 		return result;
 	}
-
+	
+	if (type == STACK) {
+		// Does nothing for stack (page already zeroed)
+		vmstats_inc(VMSTAT_PAGE_FAULT_ZERO);
+		return 0;
+	}
+	
+	vmstats_inc(VMSTAT_PAGE_FAULT_DISK);
+	
 	struct segment* seg = get_segment(type, as);
 
 	// Offset into the segment
@@ -125,7 +126,6 @@ pt_loadPage(vaddr_t vaddr, paddr_t paddr, uint16_t swap_offset, struct addrspace
 	vmstats_inc(VMSTAT_ELF_FILE_READ);
 
 	// Don't bother executing the read call if we're not reading anything
-	// TODO: Does this count as a "Zero" stat?
 	if (readsize == 0) return 0;
 
 	/*
