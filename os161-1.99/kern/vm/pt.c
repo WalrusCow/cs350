@@ -178,11 +178,11 @@ get_pt(seg_type type, struct addrspace* as) {
  * Invalid one entry in the page table
 `* meanwhile, invalidate tlb if applicable
  */
-void 
+void
 pt_invalid(vaddr_t vaddr, struct addrspace* as,uint16_t swap_offset){
 
 	KASSERT(as != NULL);
-	
+
 	//get the table
 	seg_type type;
 	get_seg_type(vaddr, as, &type);
@@ -198,14 +198,26 @@ pt_invalid(vaddr_t vaddr, struct addrspace* as,uint16_t swap_offset){
 	paddr &= ~(PT_VALID);
 	pageTable[index].paddr = paddr;
 	pageTable[index].swap_offset = swap_offset; // invalid and swap out
-	
+
 	// we don't know if its in tlb
 	if(curproc != NULL && curproc_getas()==as){
 		struct tlbshootdown tlbs;
 		tlbs.ts_vaddr = vaddr;
 		vm_tlbshootdown(&tlbs);
 	}
-	
+
+}
+
+struct pte*
+create_pt(size_t npages, int flags) {
+	struct pte* pt = kmalloc(sizeof(struct pte) * npages);
+	if (pt == NULL) return NULL;
+
+	for (size_t i = 0; i < npages; ++i) {
+		pt[i].paddr = flags;
+		pt[i].swap_offset = 0xffff;
+	}
+	return pt;
 }
 
 #endif /* OPT-A3 */

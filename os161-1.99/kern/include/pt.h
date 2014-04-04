@@ -52,7 +52,9 @@ get_pt(seg_type type, struct addrspace* as);
 /*
  * Invalid one entry in the page table
  */
-void pt_invalid(vaddr_t vaddr, struct addrspace* as,uint16_t swap_offset);
+void pt_invalid(vaddr_t vaddr, struct addrspace* as, uint16_t swap_offset);
+
+struct pte* create_pt(size_t npages, int flags);
 #endif /* OPT-A3 */
 
 #endif /* _PT_H_ */
