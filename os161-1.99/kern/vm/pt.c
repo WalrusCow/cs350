@@ -91,18 +91,19 @@ pt_setEntry(vaddr_t vaddr, paddr_t paddr) {
  */
 int
 pt_loadPage(vaddr_t vaddr, paddr_t paddr, uint16_t swap_offset, struct addrspace *as, seg_type type) {
-	// Size to read
-	
-	if(swap_offset != 0xffff){
-		// load from swapfile
-		int result = swapin_mem(swap_offset,paddr);
-		return result;
-	}
-
 	if (type == STACK) {
 		// Does nothing for stack (page already zeroed)
 		vmstats_inc(VMSTAT_PAGE_FAULT_ZERO);
 		return 0;
+	}
+
+	vmstats_inc(VMSTAT_PAGE_FAULT_DISK);
+
+	if(swap_offset != 0xffff){
+		// load from swapfile
+		int result = swapin_mem(swap_offset,paddr);
+		vmstats_inc(VMSTAT_SWAP_FILE_READ);
+		return result;
 	}
 
 	struct segment* seg = get_segment(type, as);
@@ -121,7 +122,6 @@ pt_loadPage(vaddr_t vaddr, paddr_t paddr, uint16_t swap_offset, struct addrspace
 	// We want to read the minimum of remaining bytes and the size of a page
 	size_t readsize = (bytes_left < PAGE_SIZE) ? bytes_left : PAGE_SIZE;
 
-	vmstats_inc(VMSTAT_PAGE_FAULT_DISK);
 	vmstats_inc(VMSTAT_ELF_FILE_READ);
 
 	// Don't bother executing the read call if we're not reading anything

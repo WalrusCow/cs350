@@ -4,6 +4,7 @@
 #include <vfs.h>
 #include <kern/fcntl.h>
 #include <synch.h>
+#include <uw-vmstats.h>
 #include <uio.h>
 #include <vnode.h>
 
@@ -42,6 +43,12 @@ swapin_mem(uint16_t pageIndex, paddr_t p_dest){
 		return result;
 	}
 
+	if (u.uio_resid != 0) {
+		// Short read - some failure?
+		kprintf("SWAPFILE: Short read!\n");
+		return 1;
+	}
+
 	swap_free(pageIndex);
 	return 0;
 }
@@ -56,6 +63,8 @@ int
 swapout_mem(paddr_t paddr, uint16_t *swap_page){
 
 	KASSERT((paddr & PAGE_FRAME) == paddr); // should be page index
+
+	vmstats_inc(VMSTAT_SWAP_FILE_WRITE);
 
 	lock_acquire(swap_mutex);
 
@@ -87,6 +96,11 @@ swapout_mem(paddr_t paddr, uint16_t *swap_page){
 	int result = VOP_WRITE(swap_vn, &u);
 	if (result) {
 		panic("Swap write failed!\n");
+	}
+
+	if (u.uio_resid != 0) {
+		kprintf("SWAPFILE: Short write!\n");
+		return 1;
 	}
 
 	// maybe decrement the frame-allocation number

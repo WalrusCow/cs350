@@ -182,9 +182,10 @@ cm_allocRegion(size_t start, size_t len, struct addrspace* as, vaddr_t vaddr) {
 			uint16_t swap_offset = 0xffff;
 			paddr_t paddr = coremaps_base + (PAGE_SIZE*idx);
 			seg_type type;
-			get_seg_type(vaddr,as,&type);
+			// Trust that there is no error
+			get_seg_type(page->cm_vaddr, as, &type);
 			// Do not swap out the text segment (it is read only)
-			if(type != TEXT){
+			if(type != TEXT) {
 				swapout_mem(paddr, &swap_offset); // set the offset
 			}
 
@@ -251,17 +252,16 @@ coremaps_free(paddr_t paddr) {
 
 	KASSERT(paddr == (paddr & PAGE_FRAME));
 
-	lock_acquire(coremaps_lock);
-
 	// find the index first
 	size_t index = (paddr - coremaps_base) / PAGE_SIZE;
 
 	// Don't try to free pages not in the map (this shouldn't happen?)
 	// TODO: KASSERT this?
 	if (index >= cm_npages) {
-		lock_release(coremaps_lock);
 		return;
 	}
+
+	lock_acquire(coremaps_lock);
 
 	// How many pages were allocated at the same time as this one
 	size_t npages = coremaps[index].npages;

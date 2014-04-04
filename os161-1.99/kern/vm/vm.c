@@ -221,6 +221,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	if (newPage) {
 		// Load the page into memory - it is a new page
+		// TODO: Do not pass swap_offset here
 		result = pt_loadPage(faultaddress, paddr, swap_offset, as, segment_type);
 
 		if (result) {
