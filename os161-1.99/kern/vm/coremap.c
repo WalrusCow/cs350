@@ -183,7 +183,7 @@ cm_allocRegion(size_t start, size_t len, struct addrspace* as, vaddr_t vaddr) {
 			paddr_t paddr = coremaps_base + (PAGE_SIZE*idx);
 			seg_type type;
 			// Trust that there is no error
-			get_seg_type(page->cm_vaddr, as, &type);
+			get_seg_type(page->cm_vaddr, page->cm_as, &type);
 			// Do not swap out the text segment (it is read only)
 			if(type != TEXT) {
 				swapout_mem(paddr, &swap_offset); // set the offset
